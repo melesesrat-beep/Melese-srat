@@ -1,0 +1,6 @@
+{
+  "name": "Woreda 05 Civil Registry",
+  "description": "የወረዳ 05 የሲቪል ምዝገባ እና የነዋሪነት ዲጂتال አስተዳደር ስርዓት (Woreda 05 Civil Registration and Residency Management System)",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

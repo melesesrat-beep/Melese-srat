@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Ethiopic:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans Ethiopic", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --color-crrsaDark: #022b42;
+  --color-crrsaBlue: #0369a1;
+  --color-crrsaTeal: #0284c7;
+  --color-crrsaLightTeal: #e0f2fe;
+  --color-crrsaAccent: #38bdf8;
+
+  /* Redefine all teal classes to map to sky-blue (water-blue) for 100% theme consistency */
+  --color-teal-50: var(--color-sky-50);
+  --color-teal-100: var(--color-sky-100);
+  --color-teal-200: var(--color-sky-200);
+  --color-teal-300: var(--color-sky-300);
+  --color-teal-400: var(--color-sky-400);
+  --color-teal-500: var(--color-sky-500);
+  --color-teal-600: var(--color-sky-600);
+  --color-teal-700: var(--color-sky-700);
+  --color-teal-800: var(--color-sky-800);
+  --color-teal-900: var(--color-sky-900);
+  --color-teal-950: var(--color-sky-950);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+/* Print CSS */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+}
+

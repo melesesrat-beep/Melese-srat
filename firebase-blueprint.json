@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "IDRecord": {
+      "title": "ID Record",
+      "description": "Represents an individual's ID status in the inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "idNumber": { "type": "string" },
+        "houseNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["ለመረከብ ዝግጁ", "የወሰደ"] },
+        "pickupDate": { "type": "string" },
+        "pickupSignature": { "type": "string" }
+      },
+      "required": ["id", "name", "phone", "idNumber", "houseNumber", "status"]
+    },
+    "GeneratedDocument": {
+      "title": "Generated Document",
+      "description": "An official letter document printed and generated inside the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ref": { "type": "string" },
+        "type": { "type": "string", "enum": ["የመሸኛ መጠየቂያ ቅጽ", "የነዋሪነት ማረጋገጫ ደብቤ", "በሕይወት የመኖር ማረጋገጫ ደብዳቤ"] },
+        "name": { "type": "string" },
+        "house": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "ref", "type", "name", "house", "date"]
+    },
+    "Form010Record": {
+      "title": "Form 010 Record",
+      "description": "Record of Form 010 (Daily distribution of documents/materials)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "qty": { "type": "integer" },
+        "method": { "type": "string", "enum": ["ሲስተም", "ማኑዋል"] },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "date": { "type": "string" },
+        "remark": { "type": "string" }
+      },
+      "required": ["id", "type", "qty", "method", "from", "to", "date"]
+    },
+    "Form011Record": {
+      "title": "Form 011 Record",
+      "description": "Record of Form 011 (Daily services provided registry)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "serviceType": { "type": "string" },
+        "archive": { "type": "string" },
+        "customer": { "type": "string" },
+        "serial": { "type": "string" },
+        "method": { "type": "string", "enum": ["ሲስተም", "ማኑዋል"] },
+        "time": { "type": "string" },
+        "phone": { "type": "string" },
+        "signature": { "type": "string" }
+      },
+      "required": ["id", "date", "serviceType", "archive", "customer", "serial", "method", "time", "phone"]
+    },
+    "Form012Record": {
+      "title": "Form 012 Record",
+      "description": "Record of Form 012 (Returned or damaged materials registry)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "printType": { "type": "string" },
+        "returnStatus": { "type": "string", "enum": ["ያልተሰጠ", "የተበላሸ"] },
+        "method": { "type": "string", "enum": ["ሲስተም", "ማኑዋል"] },
+        "serial": { "type": "string" },
+        "date": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "required": ["id", "printType", "returnStatus", "method", "serial", "date", "reason"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "System-wide settings such as custom prerequisites and SMS Gateway API configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "list": { "type": "array" },
+        "smsGatewayUrl": { "type": "string" },
+        "smsGatewayApiKey": { "type": "string" },
+        "smsGatewaySenderId": { "type": "string" },
+        "smsGatewayEnabled": { "type": "boolean" }
+      }
+    },
+    "OnlinePortalTicket": {
+      "title": "Online Portal Ticket",
+      "description": "Represents an online service application ticket or appointment routed through portal.aacrrsa.gov.et",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "serviceType": { "type": "string" },
+        "status": { "type": "string", "enum": ["ሰነዶች ያልተሟሉ", "ተረጋግጧል / የተፈቀደ", "የተጠናቀቀ", "ውድቅ የተደረገ"] },
+        "submissionDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "smsSent": { "type": "boolean" },
+        "smsSentDate": { "type": "string" }
+      },
+      "required": ["id", "applicationId", "fullName", "phone", "serviceType", "status", "submissionDate"]
+    },
+    "ResidentDocument": {
+      "title": "Resident Document",
+      "description": "Scanned PDF or document of a resident stored online in the file archive system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "residentName": { "type": "string" },
+        "idNumber": { "type": "string" },
+        "houseNumber": { "type": "string" },
+        "docType": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "contentUrl": { "type": "string" },
+        "uploadDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "uploadedBy": { "type": "string" }
+      },
+      "required": ["id", "residentName", "docType", "fileName", "uploadDate"]
+    }
+  },
+  "firestore": {
+    "idInventory": {
+      "schema": "IDRecord",
+      "description": "Central registry of all citizen IDs and their stock/distribution status"
+    },
+    "generatedDocs": {
+      "schema": "GeneratedDocument",
+      "description": "Records of official generated letters/documents"
+    },
+    "form010": {
+      "schema": "Form010Record",
+      "description": "Central tracking for Form 010 daily records"
+    },
+    "form011": {
+      "schema": "Form011Record",
+      "description": "Central tracking for Form 011 daily records"
+    },
+    "form012": {
+      "schema": "Form012Record",
+      "description": "Central tracking for Form 012 daily records"
+    },
+    "settings": {
+      "schema": "GlobalSettings",
+      "description": "Central configuration settings for prerequisites lists and SMS gateway properties"
+    },
+    "onlinePortalTickets": {
+      "schema": "OnlinePortalTicket",
+      "description": "Central tracking and sync registry for portal.aacrrsa.gov.et appointments and applications"
+    },
+    "residentDocuments": {
+      "schema": "ResidentDocument",
+      "description": "Central digital document archive of scanned resident files (PDFs) with full online indexing and search"
+    }
+  }
+}

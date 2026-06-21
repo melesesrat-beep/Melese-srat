@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default fallback deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Citizen ID tracking
+    match /idInventory/{docId} {
+      allow read, write: if true;
+    }
+
+    // Official printed documents
+    match /generatedDocs/{docId} {
+      allow read, write: if true;
+    }
+
+    // Daily printing distribution form records
+    match /form010/{docId} {
+      allow read, write: if true;
+    }
+
+    // Daily services provided form records
+    match /form011/{docId} {
+      allow read, write: if true;
+    }
+
+    // Daily returned or damaged forms records
+    match /form012/{docId} {
+      allow read, write: if true;
+    }
+
+    // Config settings (e.g. custom prerequisites)
+    match /settings/{docId} {
+      allow read, write: if true;
+    }
+
+    // Online portal support queue/tickets
+    match /onlinePortalTickets/{docId} {
+      allow read, write: if true;
+    }
+
+    // Digital document archive for scanned resident files
+    match /residentDocuments/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
