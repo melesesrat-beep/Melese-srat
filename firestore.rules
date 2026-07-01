@@ -45,5 +45,10 @@ service cloud.firestore {
     match /residentDocuments/{docId} {
       allow read, write: if true;
     }
+
+    // Audit logs for district operations
+    match /auditLogs/{docId} {
+      allow read, write: if true;
+    }
   }
 }

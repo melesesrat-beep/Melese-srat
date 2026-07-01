@@ -1,0 +1,6 @@
+16:  getEthiopianDate, getEthiopianTime, getEthiopianDateComponents, ethMonths,
+698:    const comps = getEthiopianDateComponents();
+699:    const todayAmharic = getEthiopianDate();
+2090:              uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
+2138:              uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
+2222:        uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`,

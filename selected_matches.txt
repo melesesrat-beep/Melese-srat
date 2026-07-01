@@ -1,0 +1,69 @@
+  const [selectedPublicID, setSelectedPublicID] = useState<any | null>(null);
+  const [selectedDocFilterType, setSelectedDocFilterType] = useState('all');
+  const [selectedViewDoc, setSelectedViewDoc] = useState<ResidentDocument | null>(null);
+  const [selectedHandoverIndex, setSelectedHandoverIndex] = useState<number | null>(null);
+  const [selectedDocType, setSelectedDocType] = useState<DocumentType>(DocumentType.RECOMMENDATION);
+  const [selectedReportPeriod, setSelectedReportPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+    const selected = requirements.find(r => r.id === editingReqId);
+    if (selected) {
+      setEditingReqTitle(selected.title);
+      setEditingReqPointsText(selected.points.join('\n'));
+      setEditingReqDesc(selected.description || '');
+    if (selectedHandoverIndex === null) return;
+      ...idInventory[selectedHandoverIndex],
+    updated[selectedHandoverIndex] = updatedRecord;
+      type: selectedDocType,
+    alert(`${selectedDocType} በሲስተሙ ማህደር ተመዝግቧል! አሁን ማተም ይችላሉ።`);
+        if (selectedViewDoc?.id === id) {
+              {selectedPublicID && (
+                        {selectedPublicID.status === 'የወሰደ' ? (
+                        {selectedPublicID.status === 'የወሰደ' ? (
+                          <p>📅 <strong>የወሰዱበት ቀን፡</strong> {selectedPublicID.pickupDate || 'ትናንትና'}</p>
+                          className={`p-4 rounded-2xl border transition-all duration-300 shadow-sm flex flex-col justify-between gap-3 cursor-pointer ${selectedPublicID?.id === item.id ? 'ring-4 ring-cyan-400/60 bg-cyan-50/20 border-cyan-300' : item.status === 'የወሰደ' ? 'bg-slate-50/65 border-slate-200' : 'bg-emerald-50/40 border-emerald-250 hover:shadow-md hover:scale-[1.01]'}`}
+              {selectedPublicID && (
+                      <span className="text-sm font-black text-yellow-300">{selectedPublicID.name}</span>
+                      <span className="text-xs font-mono font-extrabold text-cyan-400 block bg-black/40 p-2 rounded-xl border border-white/5 mt-1">{selectedPublicID.idNumber}</span>
+                        value={selectedDocFilterType} 
+                      {docSearchQuery || selectedDocFilterType !== 'all' ? (
+                        if (selectedDocFilterType !== 'all') {
+                          if (d.docType !== selectedDocFilterType) return false;
+                      value={selectedDocType}
+                      value={selectedReportPeriod}
+                      {selectedDocType === DocumentType.RECOMMENDATION && (
+                      {selectedDocType === DocumentType.RESIDENCY && (
+                      {selectedDocType === DocumentType.LIFE_STATUS && (
+                        type={selectedDocType}
+      {selectedViewDoc !== null && (
+                  <p className="text-sm font-black text-white truncate max-w-[280px] sm:max-w-md">ባለቤት፦ {selectedViewDoc.houseOwnerName || selectedViewDoc.residentName || "ያልተሰየመ"}</p>
+                  const pageFiles: ScannedFile[] = (selectedViewDoc.files && selectedViewDoc.files.length > 0)
+                    ? selectedViewDoc.files
+                        fileName: selectedViewDoc.fileName || 'ሰነድ.pdf',
+                        fileSize: selectedViewDoc.fileSize || 'W/0',
+                        contentUrl: selectedViewDoc.contentUrl || '',
+                        uploadDate: selectedViewDoc.uploadDate
+                                      handleDeleteFileFromDoc(selectedViewDoc.id, fileObj.id);
+                                        handleAddNewFilesToDoc(selectedViewDoc.id, tempScans);
+                      🏷️ {selectedViewDoc.docType}
+                    <span className="text-[8.5px] font-bold text-slate-400 font-mono">ID: {selectedViewDoc.id.substring(0, 8)}...</span>
+                      <strong className="text-sm font-black text-[#0f384c]">{selectedViewDoc.houseOwnerName || selectedViewDoc.residentName}</strong>
+                        <strong className="text-xs font-black text-slate-800 font-mono bg-white border border-slate-150 px-2 py-1 rounded inline-block mt-0.5">{selectedViewDoc.idNumber || "የለውም"}</strong>
+                        <strong className="text-xs font-black text-[#0f405c] font-mono bg-amber-50 border border-amber-150 px-2 py-1 rounded inline-block mt-0.5">{selectedViewDoc.houseNumber || "የለውም"}</strong>
+                        <span className="text-slate-700 font-medium font-sans">{selectedViewDoc.uploadDate}</span>
+                        <span className="text-slate-700 font-extrabold text-[#0f405c]">{selectedViewDoc.uploadedBy || "ወረዳ 05 ባለሙያ"}</span>
+                        <span>የቤት ውስጥ ነዋሪዎች ሰንጠረዥ ({selectedViewDoc.members?.length || 0} አባላት)</span>
+                      const baseMembers = selectedViewDoc.members || [];
+                                    onClick={() => handleDeleteMemberFromDoc(selectedViewDoc.id, m.id)}
+                            handleAddNewMemberToDoc(selectedViewDoc.id, mb);
+                      const houseNo = selectedViewDoc.houseNumber || '';
+                      const baseMembers = selectedViewDoc.members || [];
+                                  handleAddNewMemberToDoc(selectedViewDoc.id, mb);
+                                  if (docItem.id === selectedViewDoc.id) {
+                                const updatedDoc = updatedDocs.find(d => d.id === selectedViewDoc.id);
+                                      await setDoc(doc(db, 'residentDocuments', selectedViewDoc.id), updatedDoc);
+                  {selectedViewDoc.notes && (
+                        "{selectedViewDoc.notes}"
+                      href={selectedViewDoc.contentUrl}
+                      download={selectedViewDoc.fileName}
+      {selectedHandoverIndex !== null && (
+                የተገልጋይ ስም: <strong className="text-slate-900 font-bold">{idInventory[selectedHandoverIndex].name}</strong><br />
+                የመታወቂያ ቁጥር: <strong className="font-mono">{idInventory[selectedHandoverIndex].idNumber}</strong>

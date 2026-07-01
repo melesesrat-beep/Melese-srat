@@ -1,15 +1,15 @@
-import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import React, { useState, useEffect, useMemo, FormEvent, ChangeEvent } from 'react';
 import { 
   Search, FileText, CheckCircle2, Calendar, Clock, Lock, Unlock, LogOut, 
   Printer, Download, AlertTriangle, Menu, X, Plus, Trash2, ShieldCheck, 
-  Languages, Fingerprint, RefreshCw, Eye, ChevronRight, Check, FileSpreadsheet,
+  Languages, RefreshCw, Eye, ChevronRight, Check, FileSpreadsheet,
   ChevronDown, MessageSquare, Send, Smartphone, Camera, Sparkles, Globe, Folder, FolderClosed,
-  Columns, Maximize2, Layers, BookOpen
+  Columns, Maximize2, Layers, BookOpen, Activity
 } from 'lucide-react';
 
 import { 
   IDRecord, GeneratedDocument, Form010Record, Form011Record, Form012Record, DocumentType, OnlinePortalTicket, ResidentDocument,
-  ScannedFile, HouseholdMember
+  ScannedFile, HouseholdMember, AuditLog
 } from './types';
 
 import { 
@@ -107,13 +107,196 @@ const getNextResDocIdNumber = (docs: ResidentDocument[]): string => {
   return `bw${String(nextSeq).padStart(6, '0')}`;
 };
 
+// 🚥 Custom glowing LED styling mapper for each service prerequisite type 🚥
+const getServiceLedStyle = (reqId: string) => {
+  const styles: Record<string, {
+    bg: string;
+    border: string;
+    text: string;
+    accent: string;
+    glow: string;
+    ledDot: string;
+    ledGlowColor: string;
+    shadow: string;
+    emoji: string;
+    nameAm: string;
+  }> = {
+    'req-birth': {
+      bg: 'bg-cyan-50/40',
+      border: 'border-cyan-200/90',
+      text: 'text-cyan-950',
+      accent: 'text-cyan-700',
+      glow: 'shadow-[0_0_20px_rgba(6,182,212,0.15)]',
+      ledDot: 'bg-cyan-500 shadow-cyan-400/90',
+      ledGlowColor: 'rgba(6, 182, 212, 0.95)',
+      shadow: '0 0 10px rgba(6, 182, 212, 0.6)',
+      emoji: '👶',
+      nameAm: 'የልደት ምዝገባ'
+    },
+    'req-marriage': {
+      bg: 'bg-emerald-50/40',
+      border: 'border-emerald-200/90',
+      text: 'text-emerald-950',
+      accent: 'text-emerald-700',
+      glow: 'shadow-[0_0_20px_rgba(16,185,129,0.15)]',
+      ledDot: 'bg-emerald-500 shadow-emerald-400/90',
+      ledGlowColor: 'rgba(16, 185, 129, 0.95)',
+      shadow: '0 0 10px rgba(16, 185, 129, 0.6)',
+      emoji: '💍',
+      nameAm: 'የጋብቻ ምዝገባ'
+    },
+    'req-divorce': {
+      bg: 'bg-rose-50/40',
+      border: 'border-rose-200/90',
+      text: 'text-rose-950',
+      accent: 'text-rose-700',
+      glow: 'shadow-[0_0_20px_rgba(244,63,94,0.15)]',
+      ledDot: 'bg-rose-500 shadow-rose-400/90',
+      ledGlowColor: 'rgba(244, 63, 94, 0.95)',
+      shadow: '0 0 10px rgba(244, 63, 94, 0.6)',
+      emoji: '💔',
+      nameAm: 'የፍቺ ምዝገባ'
+    },
+    'req-death': {
+      bg: 'bg-amber-50/40',
+      border: 'border-amber-200/90',
+      text: 'text-amber-950',
+      accent: 'text-amber-700',
+      glow: 'shadow-[0_0_20px_rgba(245,158,11,0.15)]',
+      ledDot: 'bg-amber-500 shadow-amber-400/90',
+      ledGlowColor: 'rgba(245, 158, 11, 0.95)',
+      shadow: '0 0 10px rgba(245, 158, 11, 0.6)',
+      emoji: '🕊️',
+      nameAm: 'የሞት ምዝገባ'
+    },
+    'req-adoption': {
+      bg: 'bg-fuchsia-50/40',
+      border: 'border-fuchsia-200/90',
+      text: 'text-fuchsia-950',
+      accent: 'text-fuchsia-700',
+      glow: 'shadow-[0_0_20px_rgba(217,70,239,0.15)]',
+      ledDot: 'bg-fuchsia-500 shadow-fuchsia-400/90',
+      ledGlowColor: 'rgba(217, 70, 239, 0.95)',
+      shadow: '0 0 10px rgba(217, 70, 239, 0.6)',
+      emoji: '👪',
+      nameAm: 'የጉዲፈቻ ምዝገባ'
+    },
+    'req-id-new': {
+      bg: 'bg-sky-50/40',
+      border: 'border-sky-200/90',
+      text: 'text-sky-950',
+      accent: 'text-sky-700',
+      glow: 'shadow-[0_0_20px_rgba(14,165,233,0.15)]',
+      ledDot: 'bg-sky-500 shadow-sky-400/90',
+      ledGlowColor: 'rgba(14, 165, 233, 0.95)',
+      shadow: '0 0 10px rgba(14, 165, 233, 0.6)',
+      emoji: '🏠',
+      nameAm: 'አዲስ የነዋሪነት መታወቂያ'
+    },
+    'req-id-renew': {
+      bg: 'bg-indigo-50/40',
+      border: 'border-indigo-200/90',
+      text: 'text-indigo-950',
+      accent: 'text-indigo-700',
+      glow: 'shadow-[0_0_20px_rgba(99,102,241,0.15)]',
+      ledDot: 'bg-indigo-500 shadow-indigo-400/90',
+      ledGlowColor: 'rgba(99, 102, 241, 0.95)',
+      shadow: '0 0 10px rgba(99, 102, 241, 0.6)',
+      emoji: '🔄',
+      nameAm: 'የነዋሪነት መታወቂያ እድሳት'
+    },
+    'req-id-replace': {
+      bg: 'bg-orange-50/40',
+      border: 'border-orange-200/90',
+      text: 'text-orange-950',
+      accent: 'text-orange-700',
+      glow: 'shadow-[0_0_20px_rgba(249,115,22,0.15)]',
+      ledDot: 'bg-orange-500 shadow-orange-400/90',
+      ledGlowColor: 'rgba(249, 115, 22, 0.95)',
+      shadow: '0 0 10px rgba(249, 115, 22, 0.6)',
+      emoji: '⚠️',
+      nameAm: 'የጠፋ/የተበላሸ መታወቂያ'
+    },
+    'req-single': {
+      bg: 'bg-blue-50/40',
+      border: 'border-blue-200/90',
+      text: 'text-blue-950',
+      accent: 'text-blue-700',
+      glow: 'shadow-[0_0_20px_rgba(59,130,246,0.15)]',
+      ledDot: 'bg-blue-500 shadow-blue-400/90',
+      ledGlowColor: 'rgba(59, 130, 246, 0.95)',
+      shadow: '0 0 10px rgba(59, 130, 246, 0.6)',
+      emoji: '📜',
+      nameAm: 'ያላገባ ምስክር ወረቀት'
+    },
+    'req-life': {
+      bg: 'bg-teal-50/40',
+      border: 'border-teal-200/90',
+      text: 'text-teal-950',
+      accent: 'text-teal-700',
+      glow: 'shadow-[0_0_20px_rgba(20,184,166,0.15)]',
+      ledDot: 'bg-teal-500 shadow-teal-400/90',
+      ledGlowColor: 'rgba(20, 184, 166, 0.95)',
+      shadow: '0 0 10px rgba(20, 184, 166, 0.6)',
+      emoji: '👤',
+      nameAm: 'በሕይወት መኖር ማረጋገጫ'
+    }
+  };
+
+  return styles[reqId] || {
+    bg: 'bg-slate-50/40',
+    border: 'border-slate-200/90',
+    text: 'text-slate-950',
+    accent: 'text-slate-700',
+    glow: 'shadow-[0_0_20px_rgba(100,116,139,0.12)]',
+    ledDot: 'bg-slate-500 shadow-slate-400/90',
+    ledGlowColor: 'rgba(100, 116, 139, 0.95)',
+    shadow: '0 0 10px rgba(100, 116, 139, 0.6)',
+    emoji: '📋',
+    nameAm: 'ሌላ አገልግሎት'
+  };
+};
+
+const generateCursiveSignature = (name: string, fontName: string) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 300;
+  canvas.height = 100;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (fontName !== 'cursive') {
+      const linkId = 'sig-font-' + fontName.replace(/\s+/g, '-');
+      if (!document.getElementById(linkId)) {
+        const link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${fontName.replace(/\s+/g, '+')}&display=swap`;
+        document.head.appendChild(link);
+      }
+    }
+
+    ctx.font = `32px "${fontName}", "Brush Script MT", "Dancing Script", cursive`;
+    ctx.fillStyle = '#0f172a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-0.05);
+    ctx.fillText(name, 0, 0);
+    
+    return canvas.toDataURL('image/png');
+  }
+  return '';
+};
+
 export default function App() {
   // Navigation & UI States
   const [activePortal, setActivePortal] = useState<'public' | 'admin'>('public');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
-  const [adminTab, setAdminTab] = useState<'handovers' | 'docs' | 'form010' | 'form011' | 'form012' | 'security' | 'prerequisites' | 'smsGateway' | 'residentDocs' | 'printingForms'>('residentDocs');
+  const [adminTab, setAdminTab] = useState<'handovers' | 'docs' | 'form010' | 'form011' | 'form012' | 'security' | 'prerequisites' | 'smsGateway' | 'residentDocs' | 'printingForms' | 'audit'>('handovers');
   const [activePrintForm, setActivePrintForm] = useState<'form010' | 'form011' | 'form012'>('form010');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProposalModal, setShowProposalModal] = useState(false);
@@ -124,6 +307,19 @@ export default function App() {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   const [showRequirementsModal, setShowRequirementsModal] = useState(false);
   const [selectedPublicID, setSelectedPublicID] = useState<any | null>(null);
+  const [selectedPublicReqId, setSelectedPublicReqId] = useState<string>('');
+  
+  // 🕒 Auto-rotate state management for Service Prerequisites (Default: 5 minutes = 300 seconds)
+  const [rotateSecondsLeft, setRotateSecondsLeft] = useState<number>(300);
+  const [autoRotateInterval, setAutoRotateInterval] = useState<number>(300); // 300s = 5m
+  const [isAutoRotatePaused, setIsAutoRotatePaused] = useState<boolean>(false);
+
+  // Handle manual requirement change, reset countdown, and pause auto-rotation to allow reading
+  const handleManualReqSelect = (reqId: string) => {
+    setSelectedPublicReqId(reqId);
+    setRotateSecondsLeft(autoRotateInterval);
+    setIsAutoRotatePaused(true); // Pause auto-rotation so they can read comfortably in peace
+  };
 
   // Translation Support function
   const t = (key: string): string => {
@@ -212,13 +408,205 @@ export default function App() {
     return translations[key]?.[currentLang] || translations[key]?.['am'] || key;
   };
 
-  // Database States loaded from local storage
-  const [idInventory, setIdInventory] = useState<IDRecord[]>([]);
-  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
-  const [form010, setForm010] = useState<Form010Record[]>([]);
-  const [form011, setForm011] = useState<Form011Record[]>([]);
-  const [form012, setForm012] = useState<Form012Record[]>([]);
-  const [residentDocs, setResidentDocs] = useState<ResidentDocument[]>([]);
+  // Database States loaded from local storage (Multi-Woreda Aware)
+  const [allIdInventory, setAllIdInventory] = useState<IDRecord[]>([]);
+  const [allGeneratedDocs, setAllGeneratedDocs] = useState<GeneratedDocument[]>([]);
+  const [allForm010, setAllForm010] = useState<Form010Record[]>([]);
+  const [allForm011, setAllForm011] = useState<Form011Record[]>([]);
+  const [allForm012, setAllForm012] = useState<Form012Record[]>([]);
+  const [allResidentDocs, setAllResidentDocs] = useState<ResidentDocument[]>([]);
+  const [allOnlineTickets, setAllOnlineTickets] = useState<OnlinePortalTicket[]>([]);
+
+  // Multi-Woreda Scope Selector & State
+  const [selectedWoreda, setSelectedWoreda] = useState<string>(() => {
+    return localStorage.getItem('W05_selectedWoreda') || 'ቦሌ ወረዳ 05';
+  });
+  const [woredaDropdownOpen, setWoredaDropdownOpen] = useState(false);
+  const [woredaList, setWoredaList] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('W05_woredaList');
+      return stored ? JSON.parse(stored) : ['ቦሌ ወረዳ 05', 'ቦሌ ወረዳ 03', 'የካ ወረዳ 11', 'ቂርቆስ ወረዳ 02'];
+    } catch {
+      return ['ቦሌ ወረዳ 05', 'ቦሌ ወረዳ 03', 'የካ ወረዳ 11', 'ቂርቆስ ወረዳ 02'];
+    }
+  });
+
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState('all');
+  const [auditWoredaFilter, setAuditWoredaFilter] = useState('current');
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  // Specific Ethiopian Date Range Filters for Forms Audit (010, 011, 012)
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [auditDayFrom, setAuditDayFrom] = useState('');
+  const [auditMonthFrom, setAuditMonthFrom] = useState('');
+  const [auditYearFrom, setAuditYearFrom] = useState('');
+  const [auditDayTo, setAuditDayTo] = useState('');
+  const [auditMonthTo, setAuditMonthTo] = useState('');
+  const [auditYearTo, setAuditYearTo] = useState('');
+  const [auditViewMode, setAuditViewMode] = useState<'summary' | 'detailed'>('summary');
+
+  useEffect(() => {
+    localStorage.setItem('W05_selectedWoreda', selectedWoreda);
+  }, [selectedWoreda]);
+
+  const logAuditAction = async (action: string, details: string) => {
+    const operatorName = localStorage.getItem('W05_activeStaffName') || 'የዕለቱ ተረኛ ባለሙያ';
+    const ethTime = getEthiopianTime();
+    const ethDate = getEthiopianDate();
+    const newLog: AuditLog = {
+      id: 'aud-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+      timestamp: `${ethDate} ${ethTime}`,
+      woreda: selectedWoreda,
+      action,
+      operator: operatorName,
+      details
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'auditLogs', newLog.id), newLog);
+      } catch (error) {
+        console.error("Failed to log audit action:", error);
+      }
+    } else {
+      setAuditLogs(prev => {
+        const updated = [newLog, ...prev];
+        localStorage.setItem('W05_auditLogs', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  // Filtered computed views
+  const idInventory = allIdInventory.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const generatedDocs = allGeneratedDocs.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const form010 = allForm010.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const form011 = allForm011.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const form012 = allForm012.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const residentDocs = allResidentDocs.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+  const onlineTickets = allOnlineTickets.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+
+  const filteredAuditLogs = auditLogs.filter(log => {
+    // Woreda Filter
+    if (auditWoredaFilter === 'current' && log.woreda !== selectedWoreda) {
+      return false;
+    }
+    
+    // Category Filter
+    if (auditCategoryFilter !== 'all') {
+      const act = log.action.toLowerCase();
+      const det = log.details.toLowerCase();
+      if (auditCategoryFilter === 'handovers') {
+        const matches = act.includes('ርክክብ') || act.includes('መታወቂያ') || act.includes('id') || act.includes('hand') || act.includes('pickup');
+        if (!matches) return false;
+      } else if (auditCategoryFilter === 'docs') {
+        const matches = act.includes('ሰነድ') || act.includes('ደብዳቤ') || act.includes('doc') || act.includes('ቅፅ') || act.includes('form');
+        if (!matches) return false;
+      } else if (auditCategoryFilter === 'profile') {
+        const matches = act.includes('ነዋሪ') || act.includes('profile') || act.includes('member') || act.includes('resident');
+        if (!matches) return false;
+      } else if (auditCategoryFilter === 'security') {
+        const matches = act.includes('ደህንነት') || act.includes('መግቢያ') || act.includes('መውጫ') || act.includes('login') || act.includes('logout') || act.includes('backup') || act.includes('restore') || act.includes('reset');
+        if (!matches) return false;
+      }
+    }
+    
+    // Search Term
+    if (auditSearch.trim()) {
+      const term = auditSearch.toLowerCase();
+      return (
+        log.action.toLowerCase().includes(term) ||
+        log.details.toLowerCase().includes(term) ||
+        log.operator.toLowerCase().includes(term) ||
+        log.timestamp.toLowerCase().includes(term) ||
+        (log.woreda && log.woreda.toLowerCase().includes(term))
+      );
+    }
+    
+    return true;
+  });
+
+  // Setters to automatically update the raw state safely preserving other Woredas
+  const setIdInventory = (updatedOrCb: IDRecord[] | ((prev: IDRecord[]) => IDRecord[])) => {
+    setAllIdInventory(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      return [...updatedWithWoreda, ...otherWoredas];
+    });
+  };
+
+  const setGeneratedDocs = (updatedOrCb: GeneratedDocument[] | ((prev: GeneratedDocument[]) => GeneratedDocument[])) => {
+    setAllGeneratedDocs(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      const merged = [...updatedWithWoreda, ...otherWoredas];
+      localStorage.setItem('W05_generatedDocs', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
+  const setForm010 = (updatedOrCb: Form010Record[] | ((prev: Form010Record[]) => Form010Record[])) => {
+    setAllForm010(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      const merged = [...updatedWithWoreda, ...otherWoredas];
+      localStorage.setItem('W05_form010', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
+  const setForm011 = (updatedOrCb: Form011Record[] | ((prev: Form011Record[]) => Form011Record[])) => {
+    setAllForm011(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      const merged = [...updatedWithWoreda, ...otherWoredas];
+      localStorage.setItem('W05_form011', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
+  const setForm012 = (updatedOrCb: Form012Record[] | ((prev: Form012Record[]) => Form012Record[])) => {
+    setAllForm012(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወบริการ 05') !== selectedWoreda);
+      const merged = [...updatedWithWoreda, ...otherWoredas];
+      localStorage.setItem('W05_form012', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
+  const setResidentDocs = (updatedOrCb: ResidentDocument[] | ((prev: ResidentDocument[]) => ResidentDocument[])) => {
+    setAllResidentDocs(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      const merged = [...updatedWithWoreda, ...otherWoredas];
+      localStorage.setItem('W05_residentDocs', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
+  const setOnlineTickets = (updatedOrCb: OnlinePortalTicket[] | ((prev: OnlinePortalTicket[]) => OnlinePortalTicket[])) => {
+    setAllOnlineTickets(prev => {
+      const activeItems = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda);
+      const updated = typeof updatedOrCb === 'function' ? updatedOrCb(activeItems) : updatedOrCb;
+      const updatedWithWoreda = updated.map(item => ({ ...item, woreda: item.woreda || selectedWoreda }));
+      const otherWoredas = prev.filter(item => (item.woreda || 'ቦሌ ወረዳ 05') !== selectedWoreda);
+      return [...updatedWithWoreda, ...otherWoredas];
+    });
+  };
 
   // Resident Scanned Document Form States
   const [resDocHouseOwnerName, setResDocHouseOwnerName] = useState('');
@@ -467,13 +855,18 @@ export default function App() {
 
   // Search filter strings
   const [publicSearch, setPublicSearch] = useState('');
+  const [publicDateSearch, setPublicDateSearch] = useState('');
   const [adminSearch, setAdminSearch] = useState('');
+  const [adminDateSearch, setAdminDateSearch] = useState('');
   const [smsPendingFilter, setSmsPendingFilter] = useState(false);
+  const [deliveredFilter, setDeliveredFilter] = useState(false);
+  const [reportPeriod, setReportPeriod] = useState<'day' | 'week' | 'month'>('day');
   
   // Independent filters for Form 010
   const [f10FilterServiceType, setF10FilterServiceType] = useState('all');
   const [f10FilterSerial, setF10FilterSerial] = useState('');
   const [f10FilterDate, setF10FilterDate] = useState('');
+  const [f10FilterHandoverType, setF10FilterHandoverType] = useState<'all' | 'የክፍለከተማ መረካከቢያ' | 'የወረዳ መረካከቢያ'>('all');
 
   // Independent filters for Form 011
   const [f11FilterServiceType, setF11FilterServiceType] = useState('all');
@@ -484,6 +877,14 @@ export default function App() {
   const [f12FilterServiceType, setF12FilterServiceType] = useState('all');
   const [f12FilterSerial, setF12FilterSerial] = useState('');
   const [f12FilterDate, setF12FilterDate] = useState('');
+
+  // Independent filters for Audit Panel Date Range
+  const [auditFilterFromDay, setAuditFilterFromDay] = useState('');
+  const [auditFilterFromMonth, setAuditFilterFromMonth] = useState('መስከረም');
+  const [auditFilterFromYear, setAuditFilterFromYear] = useState('');
+  const [auditFilterToDay, setAuditFilterToDay] = useState('');
+  const [auditFilterToMonth, setAuditFilterToMonth] = useState('መስከረም');
+  const [auditFilterToYear, setAuditFilterToYear] = useState('');
 
   // Accordion status states for services
   const [expandedAccordion, setExpandedAccordion] = useState<string | null>(null);
@@ -496,7 +897,7 @@ export default function App() {
   const [newIdHouse, setNewIdHouse] = useState('');
 
   // 1.5. Online Civil Registry (portal.aacrrsa.gov.et) Integration States
-  const [onlineTickets, setOnlineTickets] = useState<OnlinePortalTicket[]>([]);
+  // onlineTickets is now declared dynamically as a filtered view of allOnlineTickets
   const [newPortalAppId, setNewPortalAppId] = useState('');
   const [newPortalName, setNewPortalName] = useState('');
   const [newPortalPhone, setNewPortalPhone] = useState('');
@@ -533,25 +934,109 @@ export default function App() {
     if (!rowDate) return false;
     
     const normalize = (dateStr: string) => {
-      let clean = dateStr.replace(/\s+/g, '').replace(/ዓ\.ም\.?/g, '');
+      let clean = dateStr.replace(/\s+/g, '').replace(/ዓ\.ም\.?/g, '').toLowerCase();
       const parts = clean.split('/');
+      const ethMonthsNow = [
+        "መስከረም", "ጥቅምት", "ኅዳር", "ታኅሣሥ", "ጥር", "የካቲት", "መጋቢት", "ሚያዝያ", "ግንቦት", "ሰኔ", "ሐምሌ", "ነሐሴ", "ጳጉሜን"
+      ];
       if (parts.length === 3) {
         let day = parts[0];
         let month = parts[1];
         let year = parts[2];
         const monthNum = parseInt(month, 10);
         if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 13) {
-          const ethMonthsNow = [
-            "መስከረም", "ጥቅምት", "ኅዳር", "ታኅሣሥ", "ጥር", "የካቲት", "መጋቢት", "ሚያዝያ", "ግንቦት", "ሰኔ", "ሐምሌ", "ነሐሴ", "ጳጉሜን"
-          ];
           month = ethMonthsNow[monthNum - 1];
         }
-        return `${day}/${month}/${year}`;
+        return `${day}${month}${year}`;
+      } else if (parts.length === 2) {
+        let part0 = parts[0];
+        let part1 = parts[1];
+        const p0Num = parseInt(part0, 10);
+        const p1Num = parseInt(part1, 10);
+        if (!isNaN(p1Num) && p1Num >= 1 && p1Num <= 13 && part1.length <= 2) {
+          part1 = ethMonthsNow[p1Num - 1];
+          return `${part0}${part1}`;
+        } else if (!isNaN(p0Num) && p0Num >= 1 && p0Num <= 13 && part0.length <= 2 && !isNaN(p1Num) && p1Num > 13) {
+          part0 = ethMonthsNow[p0Num - 1];
+          return `${part0}${part1}`;
+        }
       }
       return clean;
     };
     
     return normalize(rowDate).includes(normalize(filterDate));
+  };
+
+  // Helper to parse Ethiopian date string into a comparable numeric value
+  const parseEthDateToNumeric = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    let clean = dateStr.trim().replace(/\s+/g, ' ');
+    
+    let day = 1;
+    let monthIndex = 0; // 0-based
+    let year = 2016;
+
+    const ethMonthsNow = [
+      "መስከረም", "ጥቅምት", "ኅዳር", "ታኅሣሥ", "ጥር", "የካቲት", "መጋቢት", "ሚያዝያ", "ግንቦት", "ሰኔ", "ሐምሌ", "ነሐሴ", "ጳጉሜን"
+    ];
+
+    if (clean.includes('/')) {
+      const parts = clean.split(' ')[0].split('/');
+      if (parts.length >= 3) {
+        day = parseInt(parts[0], 10) || 1;
+        const mStr = parts[1];
+        const yearPart = parts[2];
+        year = parseInt(yearPart, 10) || 2016;
+        
+        const mNum = parseInt(mStr, 10);
+        if (!isNaN(mNum) && mNum >= 1 && mNum <= 13) {
+          monthIndex = mNum - 1;
+        } else {
+          const foundIdx = ethMonthsNow.findIndex(m => mStr.includes(m));
+          if (foundIdx !== -1) {
+            monthIndex = foundIdx;
+          }
+        }
+      }
+    } else {
+      const parts = clean.split(' ');
+      if (parts.length >= 3) {
+        day = parseInt(parts[0], 10) || 1;
+        const mStr = parts[1];
+        const yearPart = parts[2];
+        year = parseInt(yearPart, 10) || 2016;
+
+        const foundIdx = ethMonthsNow.findIndex(m => mStr.includes(m));
+        if (foundIdx !== -1) {
+          monthIndex = foundIdx;
+        } else {
+          const mNum = parseInt(mStr, 10);
+          if (!isNaN(mNum) && mNum >= 1 && mNum <= 13) {
+            monthIndex = mNum - 1;
+          }
+        }
+      }
+    }
+
+    return year * 10000 + (monthIndex + 1) * 100 + day;
+  };
+
+  // Helper to check if row date falls within Ethiopian from-to range
+  const isDateWithinRange = (dateStr: string, fromDateStr: string, toDateStr: string): boolean => {
+    const rowVal = parseEthDateToNumeric(dateStr);
+    if (!rowVal) return false;
+
+    if (fromDateStr) {
+      const fromVal = parseEthDateToNumeric(fromDateStr);
+      if (fromVal && rowVal < fromVal) return false;
+    }
+
+    if (toDateStr) {
+      const toVal = parseEthDateToNumeric(toDateStr);
+      if (toVal && rowVal > toVal) return false;
+    }
+
+    return true;
   };
 
   // 3. Document Hub Generator Form
@@ -591,6 +1076,7 @@ export default function App() {
   const [f10Month, setF10Month] = useState('');
   const [f10Year, setF10Year] = useState('');
   const [f10Remark, setF10Remark] = useState('');
+  const [f10HandoverType, setF10HandoverType] = useState<'የክፍለከተማ መረካከቢያ' | 'የወረዳ መረካከቢያ'>('የክፍለከተማ መረካከቢያ');
 
   // 5. Form 011 Inputs
   const [f11DateDay, setF11DateDay] = useState('');
@@ -603,6 +1089,9 @@ export default function App() {
   const [f11Method, setF11Method] = useState<'ሲስተም' | 'ማኑዋል'>('ሲስተም');
   const [f11Phone, setF11Phone] = useState('');
   const [f11Signature, setF11Signature] = useState('');
+  const [f10Signature, setF10Signature] = useState('');
+  const [f12Signature, setF12Signature] = useState('');
+  const [activeSignatureRecord, setActiveSignatureRecord] = useState<{ type: 'f10' | 'f11' | 'f12'; id: string; name: string } | null>(null);
 
   // 6. Form 012 Inputs
   const [f12PrintType, setF12PrintType] = useState('ልደት ምስክር ወረቀት');
@@ -730,48 +1219,48 @@ export default function App() {
     const storedResidentDocs = localStorage.getItem('W05_residentDocs');
     const storedRequirements = localStorage.getItem('W05_requirements');
 
-    if (storedIds) setIdInventory(JSON.parse(storedIds));
+    if (storedIds) setAllIdInventory(JSON.parse(storedIds));
     else {
-      setIdInventory(initialIdInventory as IDRecord[]);
+      setAllIdInventory(initialIdInventory as IDRecord[]);
       localStorage.setItem('W05_idInventory', JSON.stringify(initialIdInventory));
     }
 
-    if (storedDocs) setGeneratedDocs(JSON.parse(storedDocs));
+    if (storedDocs) setAllGeneratedDocs(JSON.parse(storedDocs));
     else {
-      setGeneratedDocs(initialGeneratedDocs as GeneratedDocument[]);
+      setAllGeneratedDocs(initialGeneratedDocs as GeneratedDocument[]);
       localStorage.setItem('W05_generatedDocs', JSON.stringify(initialGeneratedDocs));
     }
 
-    if (stored010) setForm010(JSON.parse(stored010));
+    if (stored010) setAllForm010(JSON.parse(stored010));
     else {
-      setForm010(initialForm010 as Form010Record[]);
+      setAllForm010(initialForm010 as Form010Record[]);
       localStorage.setItem('W05_form010', JSON.stringify(initialForm010));
     }
 
-    if (stored011) setForm011(JSON.parse(stored011));
+    if (stored011) setAllForm011(JSON.parse(stored011));
     else {
-      setForm011(initialForm011 as Form011Record[]);
+      setAllForm011(initialForm011 as Form011Record[]);
       localStorage.setItem('W05_form011', JSON.stringify(initialForm011));
     }
 
-    if (stored012) setForm012(JSON.parse(stored012));
+    if (stored012) setAllForm012(JSON.parse(stored012));
     else {
-      setForm012(initialForm012 as Form012Record[]);
+      setAllForm012(initialForm012 as Form012Record[]);
       localStorage.setItem('W05_form012', JSON.stringify(initialForm012));
     }
 
-    if (storedTickets) setOnlineTickets(JSON.parse(storedTickets));
+    if (storedTickets) setAllOnlineTickets(JSON.parse(storedTickets));
     else {
-      setOnlineTickets([]);
+      setAllOnlineTickets([]);
       localStorage.setItem('W05_onlineTickets', JSON.stringify([]));
     }
 
     if (storedResidentDocs) {
       const parsed = JSON.parse(storedResidentDocs);
-      setResidentDocs(parsed);
-      setResDocIdNumber(getNextResDocIdNumber(parsed));
+      setAllResidentDocs(parsed);
+      setResDocIdNumber(getNextResDocIdNumber(parsed.filter((item: any) => (item.woreda || 'ቦሌ ወረዳ 05') === selectedWoreda)));
     } else {
-      setResidentDocs([]);
+      setAllResidentDocs([]);
       localStorage.setItem('W05_residentDocs', JSON.stringify([]));
     }
 
@@ -780,6 +1269,15 @@ export default function App() {
         setRequirements(sanitizeRequirementsList(JSON.parse(storedRequirements)));
       } catch (err) {
         console.error("Failed to parse stored requirements:", err);
+      }
+    }
+
+    const storedAuditLogs = localStorage.getItem('W05_auditLogs');
+    if (storedAuditLogs) {
+      try {
+        setAuditLogs(JSON.parse(storedAuditLogs));
+      } catch (err) {
+        console.error("Failed to parse stored audit logs:", err);
       }
     }
 
@@ -802,10 +1300,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as IDRecord);
           });
-          setIdInventory(list);
+          setAllIdInventory(list);
           localStorage.setItem('W05_idInventory', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading idInventory failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'idInventory');
         });
         unsubscribes.push(unsubIds);
 
@@ -814,10 +1312,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as GeneratedDocument);
           });
-          setGeneratedDocs(list);
+          setAllGeneratedDocs(list);
           localStorage.setItem('W05_generatedDocs', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading generatedDocs failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'generatedDocs');
         });
         unsubscribes.push(unsubDocs);
 
@@ -826,10 +1324,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as Form010Record);
           });
-          setForm010(list);
+          setAllForm010(list);
           localStorage.setItem('W05_form010', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading form010 failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'form010');
         });
         unsubscribes.push(unsubF10);
 
@@ -838,10 +1336,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as Form011Record);
           });
-          setForm011(list);
+          setAllForm011(list);
           localStorage.setItem('W05_form011', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading form011 failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'form011');
         });
         unsubscribes.push(unsubF11);
 
@@ -850,10 +1348,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as Form012Record);
           });
-          setForm012(list);
+          setAllForm012(list);
           localStorage.setItem('W05_form012', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading form012 failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'form012');
         });
         unsubscribes.push(unsubF12);
 
@@ -862,10 +1360,10 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as OnlinePortalTicket);
           });
-          setOnlineTickets(list);
+          setAllOnlineTickets(list);
           localStorage.setItem('W05_onlineTickets', JSON.stringify(list));
         }, (error) => {
-          console.error("Firestore loading onlinePortalTickets failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'onlinePortalTickets');
         });
         unsubscribes.push(unsubTickets);
 
@@ -874,7 +1372,7 @@ export default function App() {
           snapshot.forEach(doc => {
             list.push(doc.data() as ResidentDocument);
           });
-          setResidentDocs(list);
+          setAllResidentDocs(list);
           localStorage.setItem('W05_residentDocs', JSON.stringify(list));
           setResDocIdNumber(prev => {
             if (!prev || prev.trim() === '' || prev.toLowerCase().startsWith('bw')) {
@@ -883,9 +1381,21 @@ export default function App() {
             return prev;
           });
         }, (error) => {
-          console.error("Firestore loading residentDocuments failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'residentDocuments');
         });
         unsubscribes.push(unsubResidentDocs);
+
+        const unsubAudit = onSnapshot(collection(db, 'auditLogs'), (snapshot) => {
+          const list: AuditLog[] = [];
+          snapshot.forEach(doc => {
+            list.push(doc.data() as AuditLog);
+          });
+          list.sort((a, b) => b.id.localeCompare(a.id));
+          setAuditLogs(list);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, 'auditLogs');
+        });
+        unsubscribes.push(unsubAudit);
 
         // Sync custom terms/prerequisites from Firestore settings
         const unsubReqs = onSnapshot(doc(db, 'settings', 'requirements'), (docSnap) => {
@@ -897,7 +1407,7 @@ export default function App() {
             }
           }
         }, (error) => {
-          console.error("Firestore loading requirements failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'settings/requirements');
         });
         unsubscribes.push(unsubReqs);
 
@@ -917,7 +1427,7 @@ export default function App() {
             }
           }
         }, (error) => {
-          console.error("Firestore loading sms config failed:", error);
+          handleFirestoreError(error, OperationType.GET, 'settings/sms');
         });
         unsubscribes.push(unsubSms);
 
@@ -932,6 +1442,38 @@ export default function App() {
     };
   }, []);
 
+  // 🕒 Auto-rotate Service Prerequisites Manual randomly every 5 minutes (runs silently in the background)
+  useEffect(() => {
+    if (activePortal !== 'public' || isAutoRotatePaused) return;
+
+    const timer = setInterval(() => {
+      setRotateSecondsLeft((prev) => {
+        if (prev <= 1) {
+          // Select a random service prerequisite different from the current one (if available)
+          if (requirements && requirements.length > 1) {
+            const currentReqId = selectedPublicReqId || requirements[0].id;
+            const currentIndex = requirements.findIndex(r => r.id === currentReqId);
+            let randomIndex = currentIndex;
+            // Prevent choosing the exact same index again to make the change dynamic
+            let attempts = 0;
+            while (randomIndex === currentIndex && attempts < 10) {
+              randomIndex = Math.floor(Math.random() * requirements.length);
+              attempts++;
+            }
+            const nextId = requirements[randomIndex]?.id || requirements[0].id;
+            setSelectedPublicReqId(nextId);
+          } else if (requirements && requirements.length === 1) {
+            setSelectedPublicReqId(requirements[0].id);
+          }
+          return autoRotateInterval; // reset to selected interval
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activePortal, selectedPublicReqId, requirements, autoRotateInterval, isAutoRotatePaused]);
+
   // Auto-generate Doc ID when entering the Resident Archive tab
   useEffect(() => {
     if (adminTab === 'residentDocs' && (!resDocIdNumber || resDocIdNumber.trim() === '')) {
@@ -944,6 +1486,479 @@ export default function App() {
     localStorage.setItem(key, JSON.stringify(data));
   };
 
+  // Recovered and Restored Resident Documents & Form handlers
+  const handleUploadResidentDoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resDocResidentName.trim()) {
+      alert("እባክዎ የነዋሪውን ሙሉ ስም ያስገቡ!");
+      return;
+    }
+    if (!resDocHouseNumber.trim()) {
+      alert("እባክዎ የቤት ቁጥር ያስገቡ!");
+      return;
+    }
+
+    setIsUploadingDoc(true);
+
+    const newDocId = "resdoc_" + Date.now();
+    const newDoc: ResidentDocument = {
+      id: newDocId,
+      residentName: resDocResidentName.trim(),
+      houseOwnerName: resDocResidentName.trim(),
+      houseNumber: resDocHouseNumber.trim(),
+      idNumber: resDocIdNumber.trim() || ("W05/RES-" + Math.floor(Math.random() * 100000)),
+      docType: resDocType,
+      fileName: resDocFileName || "ሰነድ.pdf",
+      fileSize: resDocFileSize || "542 KB",
+      contentUrl: resDocContent || "/assets/scanned_doc_placeholder.pdf",
+      uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`,
+      uploadedBy: "ወረዳ 05 ባለሙያ",
+      notes: resDocNotes.trim(),
+      members: [...resDocMembers],
+      files: resDocUploadedFiles.length > 0 ? resDocUploadedFiles : [
+        {
+          id: "page1_" + Date.now(),
+          fileName: resDocFileName || "ሰነድ.pdf",
+          fileSize: resDocFileSize || "542 KB",
+          contentUrl: resDocContent || "/assets/scanned_doc_placeholder.pdf",
+          uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
+        }
+      ],
+      woreda: selectedWoreda
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'residentDocuments', newDocId), newDoc);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.WRITE, `residentDocuments/${newDocId}`);
+      }
+    }
+
+    setResidentDocs(prev => [newDoc, ...prev]);
+    logAuditAction('አዲስ የቤት ዲጂታል ማህደር መመዝገብ (New Resident Doc)', `አዲስ የቤት ዲጂታል ማህደር ለባለቤት [${resDocResidentName}] ቤት ቁጥር [${resDocHouseNumber}] በተሳካ ሁኔታ ተመዝግቧል።`);
+
+    // Reset inputs
+    setResDocResidentName('');
+    setResDocHouseOwnerName('');
+    setResDocHouseNumber('');
+    setResDocIdNumber('');
+    setResDocFileName('');
+    setResDocFileSize('');
+    setResDocContent('');
+    setResDocNotes('');
+    setResDocMembers([]);
+    setResDocUploadedFiles([]);
+
+    setIsUploadingDoc(false);
+    alert("የነዋሪነት ዲጂታል ማህደር በተሳካ ሁኔታ ተመዝግቧል!");
+  };
+
+  const handleDeleteResidentDoc = async (id: string, name?: string) => {
+    if (!confirm(`እባክዎ እርግጠኛ ይሁኑ! [${name || 'ይህ ሰነድ'}] ን ከማህደሩ ውስጥ ሙሉ በሙሉ ማጥፋት ይፈልጋሉ?`)) {
+      return;
+    }
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'residentDocuments', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `residentDocuments/${id}`);
+      }
+    }
+
+    setResidentDocs(prev => prev.filter(docItem => docItem.id !== id));
+    logAuditAction('ሰነድ ማጥፋት (Delete Resident Doc)', `የቤት ዲጂታል ማህደር ሰነድ [${name || ''}] (መለያ፡ ${id}) በተሳካ ሁኔታ ጠፍቷል።`);
+    alert("የዲጂታል ማህደር ሰነድ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const deleteIDRecord = async (id: string) => {
+    if (!confirm("እባክዎ እርግጠኛ ይሁኑ! ይህንን የመታወቂያ መዝገብ ሙሉ በሙሉ ማጥፋት ይፈልጋሉ?")) {
+      return;
+    }
+    const recordToDelete = idInventory.find(x => x.id === id);
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'idInventory', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `idInventory/${id}`);
+      }
+    }
+
+    const updated = idInventory.filter(item => item.id !== id);
+    setIdInventory(updated);
+    saveState('W05_idInventory', updated);
+    logAuditAction('መታወቂያ መዝገብ ማጥፋት (Delete ID Record)', `የመታወቂያ ርክክብ መዝገብ ለባለቤት [${recordToDelete?.name || ''}] (መለያ፡ ${id}) ጠፍቷል።`);
+    alert("የመታወቂያ መዝገብ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleSaveDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docInputs.name || !docInputs.name.trim()) {
+      alert("እባክዎ የአመልካቹን ሙሉ ስም ያስገቡ!");
+      return;
+    }
+    if (!docInputs.ref || !docInputs.ref.trim()) {
+      alert("እባክዎ የሰነድ መግለጫ መለያ ቁጥር (Ref No) ያስገቡ!");
+      return;
+    }
+
+    const newDocId = "doc_" + Date.now();
+    const newDoc: GeneratedDocument = {
+      id: newDocId,
+      ref: docInputs.ref.trim(),
+      type: selectedDocType,
+      name: docInputs.name.trim(),
+      house: docInputs.house || "",
+      date: docInputs.date || ethDateNow,
+      payload: { ...docInputs },
+      woreda: selectedWoreda
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'generatedDocuments', newDocId), newDoc);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.WRITE, `generatedDocuments/${newDocId}`);
+      }
+    }
+
+    setGeneratedDocs(prev => [newDoc, ...prev]);
+    logAuditAction('ሰነድ ማመንጨት (Document Generated)', `አዲስ [${selectedDocType}] ለተቀባይ [${docInputs.name}] በቁጥር [${docInputs.ref}] በተሳካ ሁኔታ ተመስርቶ ተቀምጧል።`);
+    alert(`${selectedDocType} በሲስተሙ ማህደር ተመዝግቧል! አሁን ማተም ይችላሉ።`);
+  };
+
+  const handleDocInputChange = (field: string, value: string) => {
+    setDocInputs(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const loadDocToInputs = (doc: GeneratedDocument) => {
+    setSelectedDocType(doc.type);
+    setDocInputs({
+      ...doc.payload
+    });
+    alert(`የሰነድ መረጃ [${doc.name}] ለለውጥ/ለህትመት ዝግጁ ሆኗል።`);
+  };
+
+  const deleteGeneratedDoc = async (id: string) => {
+    if (!confirm("እባክዎ እርግጠኛ ይሁኑ! ይህንን የተመነጨ ሰነድ ሙሉ በሙሉ ማጥፋት ይፈልጋሉ?")) {
+      return;
+    }
+    const docToDelete = generatedDocs.find(x => x.id === id);
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'generatedDocuments', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `generatedDocuments/${id}`);
+      }
+    }
+
+    setGeneratedDocs(prev => prev.filter(docItem => docItem.id !== id));
+    logAuditAction('የሰነድ ማጥፋት (Delete Generated Doc)', `የተመነጨው ሰነድ [${docToDelete?.name || ''}] (መለያ፡ ${id}) በተሳካ ሁኔታ ተሰርዟል።`);
+    alert("ሰነዱ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleAddForm010 = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f10From.trim() || !f10To.trim()) {
+      alert("እባክዎ የሴሪያል ቁጥሮችን ያስገቡ!");
+      return;
+    }
+    const dateStr = (f10Day && f10Month && f10Year) ? `${f10Day} ${f10Month} ${f10Year}` : ethDateNow;
+    const newRecord: Form010Record = {
+      id: "f10_" + Date.now(),
+      type: f10PrintType,
+      qty: f10Qty,
+      method: f10Method,
+      from: f10From.toUpperCase().trim(),
+      to: f10To.toUpperCase().trim(),
+      date: dateStr,
+      remark: f10Remark.trim(),
+      woreda: selectedWoreda,
+      handoverType: f10HandoverType,
+      signature: f10Signature || undefined
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'form010', newRecord.id), newRecord);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.WRITE, `form010/${newRecord.id}`);
+      }
+    }
+
+    setForm010(prev => [...prev, newRecord]);
+    logAuditAction('ቅፅ 010 ምዝገባ (Form 010 Add)', `አዲስ የዕለት ህትመት [${f10PrintType}] (ብዛት: ${f10Qty}, ሴሪያል፡ ከ ${f10From} እስከ ${f10To}) በተሳካ ሁኔታ ተመዝግቧል።`);
+
+    // Reset inputs
+    setF10From('');
+    setF10To('');
+    setF10Remark('');
+    setF10Signature('');
+    setF10Qty(1);
+
+    alert("የቅፅ 010 መረጃ በተሳካ ሁኔታ ተመዝግቧል!");
+  };
+
+  const deleteF10Row = async (id: string) => {
+    if (!confirm("እባክዎ እርግጠኛ ይሁኑ! ይህንን የቅፅ 010 መዝገብ ማጥፋት ይፈልጋሉ?")) {
+      return;
+    }
+    const recordToDelete = form010.find(x => x.id === id);
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'form010', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `form010/${id}`);
+      }
+    }
+
+    setForm010(prev => prev.filter(row => row.id !== id));
+    logAuditAction('ቅፅ 010 ማጥፋት (Form 010 Delete)', `የቅፅ 010 መዝገብ [${recordToDelete?.type || ''}] (ሴሪያል፡ ${recordToDelete?.from || ''}-${recordToDelete?.to || ''}) ተሰርዟል።`);
+    alert("የቅፅ 010 መዝገብ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleAddForm011 = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f11Customer.trim() || !f11Serial.trim()) {
+      alert("እባክዎ የተገልጋይ ስምና ሴሪያል ቁጥር ያስገቡ!");
+      return;
+    }
+    const dateStr = (f11DateDay && f11DateMonth && f11DateYear) ? `${f11DateDay} ${f11DateMonth} ${f11DateYear}` : ethDateNow;
+    const newRecord: Form011Record = {
+      id: "f11_" + Date.now(),
+      date: dateStr,
+      serviceType: f11ServiceType,
+      archive: f11Archive.trim(),
+      customer: f11Customer.trim(),
+      serial: f11Serial.toUpperCase().trim(),
+      method: f11Method,
+      time: getEthiopianTime(),
+      phone: f11Phone.trim(),
+      signature: f11Signature || undefined,
+      woreda: selectedWoreda
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'form011', newRecord.id), newRecord);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.WRITE, `form011/${newRecord.id}`);
+      }
+    }
+
+    setForm011(prev => [...prev, newRecord]);
+    logAuditAction('ቅፅ 011 ምዝገባ (Form 011 Add)', `አዲስ የዕለት አገልግሎት [${f11ServiceType}] (ተገልጋይ: ${f11Customer}, ሴሪያል: ${f11Serial}) በተሳካ ሁኔታ ተመዝግቧል።`);
+
+    // Reset inputs
+    setF11Archive('');
+    setF11Customer('');
+    setF11Serial('');
+    setF11Phone('');
+    setF11Signature('');
+
+    alert("የቅፅ 011 መረጃ በተሳካ ሁኔታ ተመዝግቧል!");
+  };
+
+  const deleteF11Row = async (id: string) => {
+    if (!confirm("እባክዎ እርግጠኛ ይሁኑ! ይህንን የቅፅ 011 መዝገብ ማጥፋት ይፈልጋሉ?")) {
+      return;
+    }
+    const recordToDelete = form011.find(x => x.id === id);
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'form011', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `form011/${id}`);
+      }
+    }
+
+    setForm011(prev => prev.filter(row => row.id !== id));
+    logAuditAction('ቅፅ 011 ማጥፋት (Form 011 Delete)', `የቅፅ 011 መዝገብ [${recordToDelete?.serviceType || ''}] (ተገልጋይ: ${recordToDelete?.customer || ''}, ሴሪያል: ${recordToDelete?.serial || ''}) ተሰርዟል።`);
+    alert("የቅፅ 011 መዝገብ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleAddForm012 = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f12Serial.trim()) {
+      alert("እባክዎ የሴሪያል ቁጥር ያስገቡ!");
+      return;
+    }
+    const dateStr = (f12Day && f12Month && f12Year) ? `${f12Day} ${f12Month} ${f12Year}` : ethDateNow;
+    const newRecord: Form012Record = {
+      id: "f12_" + Date.now(),
+      printType: f12PrintType,
+      returnStatus: f12ReturnStatus,
+      method: f12Method,
+      serial: f12Serial.toUpperCase().trim(),
+      date: dateStr,
+      reason: f12Reason.trim(),
+      woreda: selectedWoreda,
+      signature: f12Signature || undefined
+    };
+
+    if (!isFirebaseMock) {
+      try {
+        await setDoc(doc(db, 'form012', newRecord.id), newRecord);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.WRITE, `form012/${newRecord.id}`);
+      }
+    }
+
+    setForm012(prev => [...prev, newRecord]);
+    logAuditAction('ቅፅ 012 ምዝገባ (Form 012 Add)', `የተበላሸ/ያልተሰጠ [${f12PrintType}] (ሁኔታ: ${f12ReturnStatus}, ሴሪያል: ${f12Serial}) በተሳካ ሁኔታ ተመዝግቧል።`);
+
+    // Reset inputs
+    setF12Serial('');
+    setF12Reason('');
+    setF12Signature('');
+
+    alert("የቅፅ 012 መረጃ በተሳካ ሁኔታ ተመዝግቧል!");
+  };
+
+  const deleteF12Row = async (id: string) => {
+    if (!confirm("እባክዎ እርግጠኛ ይሁኑ! ይህንን የቅፅ 012 መዝገብ ማጥፋት ይፈልጋሉ?")) {
+      return;
+    }
+    const recordToDelete = form012.find(x => x.id === id);
+
+    if (!isFirebaseMock) {
+      try {
+        await deleteDoc(doc(db, 'form012', id));
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.DELETE, `form012/${id}`);
+      }
+    }
+
+    setForm012(prev => prev.filter(row => row.id !== id));
+    logAuditAction('ቅፅ 012 ማጥፋት (Form 012 Delete)', `የቅፅ 012 መዝገብ [${recordToDelete?.printType || ''}] (ሴሪያል: ${recordToDelete?.serial || ''}) ተሰርዟል።`);
+    alert("የቅፅ 012 መዝገብ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleUpdateRecordSignature = async (type: 'f10' | 'f11' | 'f12', id: string, signatureDataUrl: string) => {
+    if (type === 'f10') {
+      const record = form010.find(x => x.id === id);
+      if (record) {
+        const updated = { ...record, signature: signatureDataUrl };
+        if (!isFirebaseMock) {
+          try {
+            await setDoc(doc(db, 'form010', id), updated);
+          } catch (err: any) {
+            handleFirestoreError(err, OperationType.WRITE, `form010/${id}`);
+          }
+        }
+        setForm010(prev => prev.map(x => x.id === id ? updated : x));
+        logAuditAction('ቅፅ 010 ፊርማ ማሻሻያ (Form 010 Signature Update)', `ለቅፅ 010 መዝገብ (ሴሪያል: ${record.from}-${record.to}) ፊርማ በተሳካ ሁኔታ ተቀምጧል።`);
+      }
+    } else if (type === 'f11') {
+      const record = form011.find(x => x.id === id);
+      if (record) {
+        const updated = { ...record, signature: signatureDataUrl };
+        if (!isFirebaseMock) {
+          try {
+            await setDoc(doc(db, 'form011', id), updated);
+          } catch (err: any) {
+            handleFirestoreError(err, OperationType.WRITE, `form011/${id}`);
+          }
+        }
+        setForm011(prev => prev.map(x => x.id === id ? updated : x));
+        logAuditAction('ቅፅ 011 ፊርማ ማሻሻያ (Form 011 Signature Update)', `ለቅፅ 011 መዝገብ (ተገልጋይ: ${record.customer}, ሴሪያል: ${record.serial}) ፊርማ በተሳካ ሁኔታ ተቀምጧል።`);
+      }
+    } else if (type === 'f12') {
+      const record = form012.find(x => x.id === id);
+      if (record) {
+        const updated = { ...record, signature: signatureDataUrl };
+        if (!isFirebaseMock) {
+          try {
+            await setDoc(doc(db, 'form012', id), updated);
+          } catch (err: any) {
+            handleFirestoreError(err, OperationType.WRITE, `form012/${id}`);
+          }
+        }
+        setForm012(prev => prev.map(x => x.id === id ? updated : x));
+        logAuditAction('ቅፅ 012 ፊርማ ማሻሻያ (Form 012 Signature Update)', `ለቅፅ 012 መዝገብ (ሴሪያል: ${record.serial}) ፊርማ በተሳካ ሁኔታ ተቀምጧል።`);
+      }
+    }
+    setActiveSignatureRecord(null);
+    alert("ፊርማው በተሳካ ሁኔታ ተቀምጧል!");
+  };
+
+  const handleDeleteFileFromDoc = async (docId: string, fileId: string) => {
+    setResidentDocs(prev => {
+      const updated = prev.map(docItem => {
+        if (docItem.id === docId) {
+          const updatedDoc = {
+            ...docItem,
+            files: docItem.files.filter(f => f.id !== fileId)
+          };
+          if (!isFirebaseMock) {
+            setDoc(doc(db, 'residentDocuments', docId), updatedDoc).catch(err => {
+              console.error("Firestore update failed:", err);
+            });
+          }
+          setSelectedViewDoc(updatedDoc);
+          return updatedDoc;
+        }
+        return docItem;
+      });
+      return updated;
+    });
+    alert("ፋይሉ በተሳካ ሁኔታ ተሰርዟል!");
+  };
+
+  const handleDeleteMemberFromDoc = async (docId: string, memberId: string) => {
+    setResidentDocs(prev => {
+      const updated = prev.map(docItem => {
+        if (docItem.id === docId) {
+          const updatedDoc = {
+            ...docItem,
+            members: docItem.members.filter(m => m.id !== memberId)
+          };
+          if (!isFirebaseMock) {
+            setDoc(doc(db, 'residentDocuments', docId), updatedDoc).catch(err => {
+              console.error("Firestore update failed:", err);
+            });
+          }
+          setSelectedViewDoc(updatedDoc);
+          return updatedDoc;
+        }
+        return docItem;
+      });
+      return updated;
+    });
+    alert("ነዋሪው በተሳካ ሁኔታ ተወግዷል!");
+  };
+
+  const handleAddNewMemberToDoc = async (docId: string, newMember: HouseholdMember) => {
+    setResidentDocs(prev => {
+      const updated = prev.map(docItem => {
+        if (docItem.id === docId) {
+          const updatedDoc = {
+            ...docItem,
+            members: [...(docItem.members || []), newMember]
+          };
+          if (!isFirebaseMock) {
+            setDoc(doc(db, 'residentDocuments', docId), updatedDoc).catch(err => {
+              console.error("Firestore update failed:", err);
+            });
+          }
+          setSelectedViewDoc(updatedDoc);
+          return updatedDoc;
+        }
+        return docItem;
+      });
+      return updated;
+    });
+    alert("አባል በተሳካ ሁኔታ ተጨምሯል!");
+  };
+
   // Login handler
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -951,12 +1966,14 @@ export default function App() {
       setIsAdminLoggedIn(true);
       setLoginError(false);
       setAdminPassword('');
+      logAuditAction('ባለሙያ መግባት (Staff Login)', `የወረዳ 05 ባለሙያ በተሳካ ሁኔታ ወደ ሲስተሙ ገብቷል።`);
     } else {
       setLoginError(true);
     }
   };
 
   const handleLogout = () => {
+    logAuditAction('ባለሙያ መውጣት (Staff Logout)', `የወረዳ 05 ባለሙያ ከሲስተሙ ወጥቷል።`);
     setIsAdminLoggedIn(false);
     setSidebarOpen(false);
     setActivePortal('public');
@@ -988,6 +2005,7 @@ export default function App() {
 
     setRequirements(updated);
     localStorage.setItem('W05_requirements', JSON.stringify(updated));
+    logAuditAction('የቅድመ ሁኔታ ማሻሻል (Edit Prerequisite)', `የአገልግሎት ቅድመ ሁኔታ [${editingReqTitle}] በተሳካ ሁኔታ ተሻሽሏል።`);
 
     if (!isFirebaseMock) {
       try {
@@ -1023,6 +2041,7 @@ export default function App() {
     const updated = [...requirements, newService];
     setRequirements(updated);
     localStorage.setItem('W05_requirements', JSON.stringify(updated));
+    logAuditAction('አዲስ ቅድመ ሁኔታ ማከል (Add Prerequisite)', `አዲስ የአገልግሎት ቅድመ ሁኔታ ሰነድ [${newService.title}] ታክሏል።`);
 
     if (!isFirebaseMock) {
       try {
@@ -1053,6 +2072,7 @@ export default function App() {
     const updated = requirements.filter(r => r.id !== reqId);
     setRequirements(updated);
     localStorage.setItem('W05_requirements', JSON.stringify(updated));
+    logAuditAction('ቅድመ ሁኔታ ማጥፋት (Delete Prerequisite)', `የአገልግሎት ቅድመ ሁኔታ [${toDelete.title}] ተሰርዟል።`);
 
     if (!isFirebaseMock) {
       try {
@@ -1100,6 +2120,8 @@ export default function App() {
     setForm010([]);
     setForm011([]);
     setForm012([]);
+
+    logAuditAction('ሲስተም ማጽዳት (System Reset)', 'ባለሙያው የደህንነት የይለፍ ቃል ተጠቅሞ ሁሉንም ሲስተም መረጃዎች ሙሉ በሙሉ አጥፍቷል።');
 
     if (!isFirebaseMock) {
       try {
@@ -1170,6 +2192,7 @@ export default function App() {
       link.click();
       document.body.removeChild(link);
       
+      logAuditAction('የባክአፕ ማውረድ (Backup Data)', 'ባለሙያው የመረጃ ደህንነት ቅጂ በምስጠራ ቁልፍ በተሳካ ሁኔታ አውርዷል።');
       alert("የደህንነት ቅጂው በተሳካ ሁኔታ ተመስጥሯል እና ወርዷል! (Backup successfully encrypted and downloaded!)");
     } catch (error) {
       alert("የደህንነት ቅጂ ስህተት: " + (error as Error).message);
@@ -1220,6 +2243,7 @@ export default function App() {
         setForm011(payload.form011 || []);
         setForm012(payload.form012 || []);
 
+        logAuditAction('የባክአፕ መመለስ (Restore Data)', `ባለሙያው በዕለቱ የደህንነት ቅጂ ፋይል [${file.name}] መረጃዎችን በተሳካ ሁኔታ መልሷል።`);
         alert("የደህንነት ቅጂው በተሳካ ሁኔታ ተመልሷል! (Backup successfully restored!)");
       } catch (error) {
         alert("የመረጃ መፍታት ስህተት የተሳሳተ የይለፍ ቃል ወይም የተበላሸ ፋይል: " + (error as Error).message);
@@ -1229,24 +2253,68 @@ export default function App() {
     fileEvent.target.value = '';
   };
 
-  // Search filter computes
+  // Search filter computes and sorts (newly added IDs starting with 'ID-' or higher IDs are placed first)
   const filteredPublicInventory = idInventory.filter(item => {
-    const term = publicSearch.toLowerCase();
-    return item.name.toLowerCase().includes(term) || item.idNumber.toLowerCase().includes(term);
+    const term = publicSearch.toLowerCase().trim();
+    const dateTerm = publicDateSearch.toLowerCase().trim();
+    
+    if (term !== '') {
+      const matchesSearch = item.name.toLowerCase().includes(term) || 
+                            item.idNumber.toLowerCase().includes(term) ||
+                            (item.houseNumber && item.houseNumber.toLowerCase().includes(term));
+      if (!matchesSearch) return false;
+    }
+    
+    if (dateTerm !== '') {
+      const regDate = item.registrationDate || item.smsSentDate || '';
+      if (!matchEthDates(regDate, dateTerm)) {
+        return false;
+      }
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    const isANew = a.id.startsWith('ID-');
+    const isBNew = b.id.startsWith('ID-');
+    if (isANew && !isBNew) return -1;
+    if (!isANew && isBNew) return 1;
+    return b.id.localeCompare(a.id);
   });
 
   const filteredAdminInventory = idInventory.filter(item => {
     const term = adminSearch.toLowerCase();
     const matchesSearch = item.name.toLowerCase().includes(term) || item.idNumber.toLowerCase().includes(term) || item.houseNumber.toLowerCase().includes(term);
-    if (smsPendingFilter) {
-      return matchesSearch && item.status === 'ለመረከብ ዝግጁ' && !item.smsSent;
+    if (!matchesSearch) return false;
+    
+    if (adminDateSearch.trim() !== '') {
+      const regDate = item.registrationDate || item.smsSentDate || '';
+      if (!matchEthDates(regDate, adminDateSearch)) {
+        return false;
+      }
     }
-    return matchesSearch;
+
+    if (smsPendingFilter) {
+      return item.status === 'ለመረከብ ዝግጁ' && !item.smsSent;
+    }
+    if (deliveredFilter) {
+      return item.status === 'የወሰደ';
+    }
+    return true;
   });
 
   // Database count computations
   const countReady = idInventory.filter(item => item.status === 'ለመረከብ ዝግጁ').length;
   const countDelivered = idInventory.filter(item => item.status === 'የወሰደ').length;
+
+  const uniqueRegDates = useMemo(() => {
+    return Array.from(
+      new Set(
+        idInventory
+          .map(item => item.registrationDate || item.smsSentDate)
+          .filter((d): d is string => !!d && d.trim() !== '')
+      )
+    ).sort();
+  }, [idInventory]);
 
   const countDeliveredToday = idInventory.filter(item => item.status === 'የወሰደ' && item.pickupDate && matchEthDates(item.pickupDate, ethDateNow)).length;
   const countDeliveredWeekly = countDelivered; // representative live count calculated from total
@@ -1356,11 +2424,11 @@ export default function App() {
   const sendPortalSmsAlert = async (ticket: OnlinePortalTicket, type: 'missing_docs' | 'approved' | 'completed') => {
     let msgText = '';
     if (type === 'missing_docs') {
-      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት የኮድ ${ticket.applicationId} አገልግሎት ማመልከቻዎ ዝርዝር ሰነዶች ያልተሟሉ ሆነው ተገኝተዋል። እባክዎ ተጨማሪ ማስረጃዎችን ይዘው በስራ ሰዓት በወረዳ 05 ሲቪል ማህደር ክፍል (Window 3) በአካል ይቅረቡ። አመሰግናለን!`;
+      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት የኮድ ${ticket.applicationId} አገልግሎት ማመልከቻዎ ዝርዝር ሰነዶች ያልተሟሉ ሆነው ተገኝተዋል። እባክዎ ተጨማሪ ማስረጃዎችን ይዘው በስራ ሰዓት በወረዳ 05 ሲቪል ማህደር ክፍል (Window 3) በአካል ይቅረቡ። እናመሰግናለን!`;
     } else if (type === 'approved') {
-      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት ማመልከቻ (ኮድ ${ticket.applicationId}) በአግባቡ ተረጋግጦ ጸድቋል። አገልግሎትዎን ለመጨረስ በአካል መጥተው ሂደቱን እንዲያጠናቅቁ ጥሪ እናደርጋለን። አመሰግናለን!`;
+      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት ማመልከቻ (ኮድ ${ticket.applicationId}) በአግባቡ ተረጋግጦ ጸድቋል። አገልግሎትዎን ለመጨረስ በአካል መጥተው ሂደቱን እንዲያጠናቅቁ ጥሪ እናደርጋለን። እናመሰግናለን!`;
     } else {
-      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት ማመልከቻ (ኮድ ${ticket.applicationId}) አገልግሎቱ በስኬት ተጠናቆ ተዘጋጅቷል። መጥተው መውሰድ ይችላሉ። አመሰግናለን!`;
+      msgText = `ጤና ይስጥልኝ ${ticket.fullName}፣ በ portal.aacrrsa.gov.et ያመለከቱት ማመልከቻ (ኮድ ${ticket.applicationId}) አገልግሎቱ በስኬት ተጠናቆ ተዘጋጅቷል። መጥተው መውሰድ ይችላሉ። እናመሰግናለን!`;
     }
 
     const gatewayUrl = smsGatewayUrl || '';
@@ -1439,7 +2507,8 @@ export default function App() {
       idNumber: newIdNum.toUpperCase(),
       houseNumber: newIdHouse,
       status: 'ለመረከብ ዝግጁ',
-      smsSent: false
+      smsSent: false,
+      registrationDate: ethDateNow
     };
 
     if (!isFirebaseMock) {
@@ -1453,6 +2522,7 @@ export default function App() {
     const updated = [newItem, ...idInventory];
     setIdInventory(updated);
     saveState('W05_idInventory', updated);
+    logAuditAction('አዲስ መታወቂያ መመዝገብ (New ID Registered)', `አዲስ መታወቂያ ለተቀባይ [${newItem.name}] የመታወቂያ ቁጥር [${newItem.idNumber}] በተሳካ ሁኔታ ተመዝግቧል።`);
 
     // Reset fields
     setNewIdName('');
@@ -1510,6 +2580,7 @@ export default function App() {
 
     setIdInventory(updated);
     saveState('W05_idInventory', updated);
+    logAuditAction('መታወቂያ ማስረከብ (ID Handed Over)', `መታወቂያ ለነዋሪው [${updatedRecord.name}] መታወቂያ ቁጥር [${updatedRecord.idNumber}] በፊርማ በተሳካ ሁኔታ ተረክቧል።`);
     setSelectedHandoverIndex(null);
     setHandoverSignature('');
     alert("የመታወቂያ ርክክቡ በተሳካ ሁኔታ ተመዝግቧል!");
@@ -1518,7 +2589,7 @@ export default function App() {
   // Open SMS modal with a language-aware message template
   const openSmsModal = (item: IDRecord) => {
     setSmsRecord(item);
-    let template = `ጤና ይስጥልኝ ${item.name}፣ የአዲስ አበባ ቦሌ ወረዳ 05 የነዋሪነት መታወቂያዎ ስለደረሰ በአስቸኳይ መጥተው ይውሰዱ። አመሰግናለን!`;
+    let template = `${item.name} ወረዳ 05 መታወቂያዎ ደርሷል መጥተው ይውሰዱ`;
     
     if (currentLang === 'or') {
       template = `Akkam jirtu ${item.name} Kartaan Eenyummeessaa jiraattota Bolee Woreda 05 keessan (Lakk. ${item.idNumber}) qopha'ee jira. Maaloo ragaa dhuunfaa ykn kaardii dhalootaa keessan qabachuun foddaa 3 (Window 3) irratti dhuftanii fudhachuu dandeessu. Galatoomaa!`;
@@ -1660,6 +2731,7 @@ export default function App() {
     const updated = idInventory.map(x => x.id === smsRecord.id ? updatedRecord : x);
     setIdInventory(updated);
     saveState('W05_idInventory', updated);
+    logAuditAction('SMS መላክ በጌትዌይ (Send Gateway SMS)', `የSMS መልዕክት ለነዋሪ [${smsRecord.name}] (ስልክ: ${smsRecord.phone}) በጌትዌይ በተሳካ ሁኔታ ተልኳል።`);
 
     setTimeout(() => {
       setIsSmsSending(false);
@@ -1695,6 +2767,7 @@ export default function App() {
     const updated = idInventory.map(x => x.id === smsRecord.id ? updatedRecord : x);
     setIdInventory(updated);
     saveState('W05_idInventory', updated);
+    logAuditAction('SMS መላክ በስልክ (Send Native SMS)', `የSMS መልዕክት ለነዋሪ [${smsRecord.name}] (ስልክ: ${smsRecord.phone}) በስልኩ መተግበሪያ በኩል ተልኳል።`);
 
     // Build the SMS URI scheme
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -1721,6 +2794,7 @@ export default function App() {
     localStorage.setItem('W05_smsGatewayApiKey', smsGatewayApiKey);
     localStorage.setItem('W05_smsGatewaySenderId', smsGatewaySenderId);
     localStorage.setItem('W05_smsGatewayEnabled', JSON.stringify(smsGatewayEnabled));
+    logAuditAction('የኤስኤምኤስ ቅንጅቶች (SMS Gateway settings)', `ባለሙያው የኤስኤምኤስ መላኪያ ጌትዌይ ቅንጅቶችን አሻሽሏል። (ሁኔታ: ${smsGatewayEnabled ? 'የበራ/Active' : 'የጠፋ/Inactive'})`);
 
     if (!isFirebaseMock) {
       try {
@@ -1769,701 +2843,41 @@ export default function App() {
         });
 
         const data = await response.json().catch(() => ({}));
+         
         if (response.ok && data.success) {
           gatewaySuccess = true;
-          gatewayResultLog = `Gateway responded setup OK. Detail: ${data.detail || ""}`;
+          gatewayResultLog = `ጌትዌይ መልስ: ${data.detail || "መልዕክት በተሳካ ሁኔታ ተልኳል!"}`;
+          alert(`የኤስኤምኤስ ሙከራ ስኬታማ ነው! ${gatewayResultLog}`);
         } else {
           gatewaySuccess = false;
-          gatewayResultLog = data.error || `Gateway response failed (Status ${response.status}). Detail: ${data.detail || ""}`;
+          gatewayResultLog = data.error || `የጌትዌይ ምላሽ አልተሳካም (Status ${response.status}).`;
+          alert(`የኤስኤምኤስ ሙከራ አልተሳካም: ${gatewayResultLog}`);
         }
       } catch (err: any) {
         gatewaySuccess = false;
-        gatewayResultLog = `Network Error while calling Gateway Proxy: ${err.message || err}`;
+        gatewayResultLog = `ኔትወርክ ስህተት: ${err.message || err}`;
+        alert(`ኔትወርክ ስህተት አጋጥሟል: ${gatewayResultLog}`);
       }
     } else {
       // Simulation mode
       gatewaySuccess = true;
-      gatewayResultLog = "Simulation Mode Active. (SMS Gateway is not enabled/configured in settings). Process completed.";
+      gatewayResultLog = "የማስመሰል ሁኔታ (Simulation Mode) ነቅቷል። (የኤስኤምኤስ ጌትዌይ በቅንብሮች ውስጥ አልበራም)። መልዕክቱ እንደተላከ ተቆጥሯል።";
+      alert(gatewayResultLog);
     }
 
-    setTimeout(() => {
-      setIsTestingSms(false);
-      if (gatewaySuccess) {
-        alert(`🎉 የኤስኤምኤስ ሙከራ በተሳካ ሁኔታ ተጠናቋል!\n\nለቁጥር: ${cleanPhone}\nመልዕክት: "${testMessage}"\n\nሲስተም ምላሽ:\n${gatewayResultLog}`);
-      } else {
-        alert(`❌ የኤስኤምኤስ ሙከራ አልተሳካም!\n\nምክንያት:\n${gatewayResultLog}\n\nእባክዎ የጌትዌይ URL አድራሻውን ወይም የኤፒአይ ቁልፍ (API Key) ትክክለኛነት ያረጋግጡ።`);
-      }
-    }, 1500);
+    logAuditAction('የኤስኤምኤስ መሞከሪያ (Test SMS Connection)', `ባለሙያው የኤስኤምኤስ ሙከራ ለስልክ [${cleanPhone}] አድርጓል። ውጤት: ${gatewaySuccess ? 'የተሳካ' : 'ያልተሳካ'} - ${gatewayResultLog}`);
+    setIsTestingSms(false);
   };
 
-  // Delete records supporting passcode security check
-  const deleteIDRecord = async (id: string) => {
-    const pw = prompt("ይህንን መታወቂያ ለመሰረዝ የሰራተኛውን የይለፍ ቃል ያስገቡ:");
-    if (pw === 'bolew05del') {
-      if (!isFirebaseMock) {
-        try {
-          await deleteDoc(doc(db, 'idInventory', id));
-        } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, `idInventory/${id}`);
-        }
-      }
-      const updated = idInventory.filter(x => x.id !== id);
-      setIdInventory(updated);
-      saveState('W05_idInventory', updated);
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
 
-  // Upload custom JPEG/PNG client photo slot for Recommendation Hub
-  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) setDocPhoto(event.target.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Input changes for template
-  const handleDocInputChange = (field: string, val: string) => {
-    setDocInputs(prev => ({ ...prev, [field]: val }));
-  };
-
-  // Save generated document to repository
-  const handleSaveDocument = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const saveDate = docInputs.date || ethDateNow;
-    const newDoc: GeneratedDocument = {
-      id: `DOC-${Date.now().toString().slice(-4)}`,
-      ref: docInputs.ref || 'W05/9012/18',
-      type: selectedDocType,
-      name: docInputs.name || 'ያልተገለጸ',
-      house: docInputs.house || '-',
-      date: saveDate,
-      payload: { ...docInputs, date: saveDate }
-    };
-
-    if (!isFirebaseMock) {
-      try {
-        await setDoc(doc(db, 'generatedDocs', newDoc.id), newDoc);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `generatedDocs/${newDoc.id}`);
-      }
-    }
-
-    const updated = [newDoc, ...generatedDocs];
-    setGeneratedDocs(updated);
-    saveState('W05_generatedDocs', updated);
-    alert(`${selectedDocType} በሲስተሙ ማህደር ተመዝግቧል! አሁን ማተም ይችላሉ።`);
-  };
-
-  const deleteGeneratedDoc = async (id: string) => {
-    const pw = prompt("ይህንን ሰነድ ከማህደሩ ለመሰረዝ የሰራተኛውን የይለፍ ቃል ያስገቡ:");
-    if (pw === 'bolew05del') {
-      if (!isFirebaseMock) {
-        try {
-          await deleteDoc(doc(db, 'generatedDocs', id));
-        } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, `generatedDocs/${id}`);
-        }
-      }
-      const updated = generatedDocs.filter(x => x.id !== id);
-      setGeneratedDocs(updated);
-      saveState('W05_generatedDocs', updated);
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
-
-  // Auto-fill template parameters on repository reprint click
-  const loadDocToInputs = (doc: GeneratedDocument) => {
-    setSelectedDocType(doc.type);
-    setDocInputs(doc.payload);
-    // Scroll window/target to document form area
-    window.scrollTo({ top: 350, behavior: 'smooth' });
-  };
-
-  // Form 010 Insertion
-  const handleAddForm010 = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!f10From || !f10To) return;
-
-    const newRecord: Form010Record = {
-      id: `F10-${Date.now().toString().slice(-4)}`,
-      type: f10PrintType,
-      qty: f10Qty,
-      method: f10Method,
-      from: f10From,
-      to: f10To,
-      date: `${f10Day}/${f10Month}/${f10Year}`,
-      remark: f10Remark || '-'
-    };
-
-    if (!isFirebaseMock) {
-      try {
-        await setDoc(doc(db, 'form010', newRecord.id), newRecord);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `form010/${newRecord.id}`);
-      }
-    }
-
-    const updated = [...form010, newRecord];
-    setForm010(updated);
-    saveState('W05_form010', updated);
-
-    // Reset
-    setF10From('');
-    setF10To('');
-    setF10Remark('');
-    alert("የቅጽ 010 መረጃ በተሳካ ሁኔታ ገብቷል!");
-  };
-
-  const deleteF10Row = async (id: string) => {
-    const pw = prompt("ይህንን የቅጽ 010 ረድፍ ለመሰረዝ የይለፍ ቃል ያስገቡ:");
-    if (pw === 'bolew05del') {
-       if (!isFirebaseMock) {
-         try {
-           await deleteDoc(doc(db, 'form010', id));
-         } catch (error) {
-           handleFirestoreError(error, OperationType.DELETE, `form010/${id}`);
-         }
-       }
-       const updated = form010.filter(x => x.id !== id);
-       setForm010(updated);
-       saveState('W05_form010', updated);
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
-
-  // Form 011 Insertion
-  const handleAddForm011 = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!f11Archive || !f11Customer || !f11Serial) return;
-
-    const newRecord: Form011Record = {
-      id: `F11-${Date.now().toString().slice(-4)}`,
-      date: `${f11DateDay}/${f11DateMonth}/${f11DateYear}`,
-      serviceType: f11ServiceType,
-      archive: f11Archive,
-      customer: f11Customer,
-      serial: f11Serial,
-      method: f11Method,
-      time: ethTimeNow,
-      phone: f11Phone || '-',
-      signature: f11Signature
-    };
-
-    if (!isFirebaseMock) {
-      try {
-        await setDoc(doc(db, 'form011', newRecord.id), newRecord);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `form011/${newRecord.id}`);
-      }
-    }
-
-    const updated = [...form011, newRecord];
-    setForm011(updated);
-    saveState('W05_form011', updated);
-
-    // Reset
-    setF11Archive('');
-    setF11Customer('');
-    setF11Serial('');
-    setF11Phone('');
-    setF11Signature('');
-    alert("የቅጽ 011 መረጃ በተሳካ ሁኔታ ገብቷል!");
-  };
-
-  const deleteF11Row = async (id: string) => {
-    const pw = prompt("ይህንን የቅጽ 011 ረድፍ ለመሰረዝ የይለፍ ቃል ያስገቡ:");
-    if (pw === 'bolew05del') {
-       if (!isFirebaseMock) {
-         try {
-           await deleteDoc(doc(db, 'form011', id));
-         } catch (error) {
-           handleFirestoreError(error, OperationType.DELETE, `form011/${id}`);
-         }
-       }
-       const updated = form011.filter(x => x.id !== id);
-       setForm011(updated);
-       saveState('W05_form011', updated);
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
-
-  // Form 012 Insertion
-  const handleAddForm012 = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!f12Serial || !f12Reason) return;
-
-    const newRecord: Form012Record = {
-      id: `F12-${Date.now().toString().slice(-4)}`,
-      printType: f12PrintType,
-      returnStatus: f12ReturnStatus as 'ያልተሰጠ' | 'የተበላሸ',
-      method: f12Method as 'ሲስተም' | 'ማኑዋል',
-      serial: f12Serial,
-      date: `${f12Day}/${f12Month}/${f12Year}`,
-      reason: f12Reason
-    };
-
-    if (!isFirebaseMock) {
-      try {
-        await setDoc(doc(db, 'form012', newRecord.id), newRecord);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `form012/${newRecord.id}`);
-      }
-    }
-
-    const updated = [...form012, newRecord];
-    setForm012(updated);
-    saveState('W05_form012', updated);
-
-    // Reset
-    setF12Serial('');
-    setF12Reason('');
-    alert("የቅጽ 012 መረጃ በተሳካ ሁኔታ ገብቷል!");
-  };
-
-  const deleteF12Row = async (id: string) => {
-    const pw = prompt("ይህንን የቅጽ 012 ረድፍ ለመሰረዝ የይለፍ ቃል ያስገቡ:");
-    if (pw === 'bolew05del') {
-       if (!isFirebaseMock) {
-         try {
-           await deleteDoc(doc(db, 'form012', id));
-         } catch (error) {
-           handleFirestoreError(error, OperationType.DELETE, `form012/${id}`);
-         }
-       }
-       const updated = form012.filter(x => x.id !== id);
-       setForm012(updated);
-       saveState('W05_form012', updated);
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
-
-  // Resident Documents Drag, Drop & Upload handlers of multiple files (pages)
-  const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const firstFile = files[0];
-      if (firstFile) {
-        const info = extractNameAndHouseFromFilename(firstFile.name, (firstFile as any).webkitRelativePath);
-        if (info.name && !resDocResidentName.trim()) {
-          setResDocResidentName(info.name);
-          setResDocHouseOwnerName(info.name);
-        }
-        if (info.houseNumber && !resDocHouseNumber.trim()) {
-          setResDocHouseNumber(info.houseNumber);
-        }
-      }
-
-      Array.from(files).forEach((file: any) => {
-        if (file.size > 20 * 1024 * 1024) {
-          alert(`የመረጡት ፋይል "${file.name}" መጠን ከ20MB ይበልጣል። እባክዎን አነስ ያለ መጠን ያለው ፋይል ይምረጡ።`);
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          if (event.target?.result) {
-            let dataUrl = event.target.result as string;
-            if (dataUrl.startsWith('data:image/')) {
-              dataUrl = await compressImageBase64(dataUrl);
-            }
-
-            const sizeInBytes = Math.round((dataUrl.length - 'data:image/png;base64,'.length) * 3 / 4);
-            const kb = sizeInBytes / 1024;
-            const sizeStr = kb > 1024 ? (kb / 1024).toFixed(2) + " MB" : kb.toFixed(1) + " KB";
-
-            const newScanned: ScannedFile = {
-              id: 'scan_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-              fileName: file.name,
-              fileSize: sizeStr,
-              contentUrl: dataUrl,
-              uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
-            };
-            setResDocUploadedFiles(prev => [...prev, newScanned]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const firstWithRelative = Array.from(files).find(f => (f as any).webkitRelativePath);
-      const relativePath = firstWithRelative ? (firstWithRelative as any).webkitRelativePath : undefined;
-      const info = extractNameAndHouseFromFilename(files[0].name, relativePath);
-      
-      if (info.name && !resDocResidentName.trim()) {
-        setResDocResidentName(info.name);
-        setResDocHouseOwnerName(info.name);
-      }
-      if (info.houseNumber && !resDocHouseNumber.trim()) {
-        setResDocHouseNumber(info.houseNumber);
-      }
-
-      Array.from(files).forEach((file: any) => {
-        if (file.size > 20 * 1024 * 1024) {
-          alert(`የመረጡት ፋይል "${file.name}" መጠን ከ20MB ይበልጣል። እባክዎን አነስ ያለ መጠን ያለው ፋይል ይምረጡ።`);
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          if (event.target?.result) {
-            let dataUrl = event.target.result as string;
-            if (dataUrl.startsWith('data:image/')) {
-              dataUrl = await compressImageBase64(dataUrl);
-            }
-
-            const sizeInBytes = Math.round((dataUrl.length - 'data:image/png;base64,'.length) * 3 / 4);
-            const kb = sizeInBytes / 1024;
-            const sizeStr = kb > 1024 ? (kb / 1024).toFixed(2) + " MB" : kb.toFixed(1) + " KB";
-
-            const newScanned: ScannedFile = {
-              id: 'scan_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-              fileName: file.webkitRelativePath || file.name,
-              fileSize: sizeStr,
-              contentUrl: dataUrl,
-              uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
-            };
-            setResDocUploadedFiles(prev => [...prev, newScanned]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  // Helper inputs to manage dynamic members draft during registration
-  const handleAddHouseholdMemberDraft = () => {
-    if (!newMemberName.trim()) {
-      alert("እባክዎ የቤተሰቡን/ነዋሪውን ሙሉ ስም ያስገቡ!");
-      return;
-    }
-    const newMB: HouseholdMember = {
-      id: 'memb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      fullName: newMemberName.trim(),
-      role: newMemberRole,
-      idNumber: newMemberId.trim() || undefined
-    };
-    setResDocMembers(prev => [...prev, newMB]);
-    
-    // Reset helper draft input fields
-    setNewMemberName('');
-    setNewMemberId('');
-    setNewMemberRole('ቤተሰብ');
-  };
-
-  const handleRemoveHouseholdMemberDraft = (id: string) => {
-    setResDocMembers(prev => prev.filter(m => m.id !== id));
-  };
-
-  // Submit complete house record (multi-scanned files + list of residents)
-  const handleUploadResidentDoc = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resDocHouseOwnerName.trim()) {
-      alert("እባክዎ የቤቱን ባለቤት/ወኪል ሙሉ ስም ያስገቡ!");
-      return;
-    }
-    if (!resDocHouseNumber.trim()) {
-      alert("እባክዎ የቤት ቁጥር ያስገቡ!");
-      return;
-    }
-    if (resDocUploadedFiles.length === 0) {
-      alert("እባክዎ ቢያንስ አንድ የተቃኘ ገጽ/ፋይል ይጫኑ!");
-      return;
-    }
-
-    setIsUploadingDoc(true);
-    try {
-      let finalMembers = [...resDocMembers];
-      // If the registered members list doesn't have the house owner, auto-add them for safety
-      const hasOwnerInList = finalMembers.some(m => m.fullName.toLowerCase() === resDocHouseOwnerName.trim().toLowerCase());
-      if (!hasOwnerInList) {
-        finalMembers.unshift({
-          id: 'memb_owner_' + Date.now(),
-          fullName: resDocHouseOwnerName.trim(),
-          role: 'የቤት ባለቤት'
-        });
-      }
-
-      // Ensure all matching house number members from the ID Inventory are registered as family members
-      if (resDocHouseNumber.trim()) {
-        const matchingInventory = idInventory.filter(item => 
-          item.houseNumber && item.houseNumber.trim().toLowerCase() === resDocHouseNumber.trim().toLowerCase()
-        );
-        matchingInventory.forEach(inv => {
-          const alreadyAdded = finalMembers.some(m => m.fullName.toLowerCase() === inv.name.trim().toLowerCase());
-          if (!alreadyAdded) {
-            finalMembers.push({
-              id: 'memb_inv_' + inv.id + '_' + Date.now() + '_' + Math.floor(Math.random() * 100),
-              fullName: inv.name.trim(),
-              role: 'ቤተሰብ',
-              idNumber: inv.idNumber || undefined
-            });
-          }
-        });
-      }
-
-      const assignedDocIdNo = resDocIdNumber.trim() || getNextResDocIdNumber(residentDocs);
-
-      const newDoc: ResidentDocument = {
-        id: 'resdoc_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-        houseOwnerName: resDocHouseOwnerName.trim(),
-        houseNumber: resDocHouseNumber.trim(),
-        docType: resDocType,
-        uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`,
-        notes: resDocNotes.trim() || undefined,
-        uploadedBy: "የወረዳ ባለሙያ",
-        files: resDocUploadedFiles,
-        members: finalMembers,
-
-        // Root fields for backwards-compatibility with search queries and older list renders:
-        residentName: resDocHouseOwnerName.trim(),
-        idNumber: assignedDocIdNo,
-        fileName: resDocUploadedFiles[0]?.fileName || "የተቃኘ ሰነድ",
-        fileSize: resDocUploadedFiles[0]?.fileSize || "ወ/0",
-        contentUrl: resDocUploadedFiles[0]?.contentUrl || ""
-      };
-
-      if (!isFirebaseMock) {
-        try {
-          await setDoc(doc(db, 'residentDocuments', newDoc.id), newDoc);
-        } catch (error) {
-          console.error("Firestore Upload Error:", error);
-          alert("ማስጠንቀቂያ፦ ሰነዱ በደመና (Cloud Database) ላይ አልተጫነም። ነገር ግን በኮምፒውተርዎ ላይ ታቦቱ (Local Database) ውስጥ በተሳካ ሁኔታ ተቀምጧል። ምክንያት፦ " + (error as Error).message);
-        }
-      }
-
-      const updated = [newDoc, ...residentDocs];
-      setResidentDocs(updated);
-      saveState('W05_residentDocs', updated);
-
-      // Reset Form State
-      setResDocHouseOwnerName('');
-      setResDocResidentName('');
-      setResDocIdNumber(getNextResDocIdNumber(updated));
-      setResDocHouseNumber('');
-      setResDocType('የነዋሪነት ማስረጃ');
-      setResDocUploadedFiles([]);
-      setResDocMembers([]);
-      setResDocNotes('');
-      setResDocFileName('');
-      setResDocFileSize('');
-      setResDocContent('');
-
-      alert("የቤቱ ዲጂታል ሰነድ ማህደር በተሳካ ሁኔታ ተፈጥሯል! " + finalMembers.length + " ነዋሪዎች ተመዝግበዋል።");
-    } catch (err) {
-      alert("ፋይሉን ማስቀመጥ አልተቻለም: " + (err as Error).message);
-    } finally {
-      setIsUploadingDoc(false);
-    }
-  };
-
-  // Delete entire house record
-  const handleDeleteResidentDoc = async (id: string, name: string) => {
-    const pw = prompt(`የአቶ/ወ/ሮ "${name}" ሙሉ የቤት ዲጂታል ሰነድ ማህደር ለማጥፋት እባክዎ የይለፍ ቃል ያስገቡ፡`);
-    if (pw === 'bolew05del') {
-      setIsUploadingDoc(true);
-      try {
-        if (!isFirebaseMock) {
-          await deleteDoc(doc(db, 'residentDocuments', id));
-        }
-
-        const updated = residentDocs.filter(d => d.id !== id);
-        setResidentDocs(updated);
-        saveState('W05_residentDocs', updated);
-
-        if (selectedViewDoc?.id === id) {
-          setSelectedViewDoc(null);
-        }
-
-        alert("የቤቱ ዲጂታል ማህደር በሙሉ ከሲስተሙ ላይ ተደምስሷል!");
-      } catch (err) {
-        alert("ማህደሩን ማጥፋት አልተቻለም: " + (err as Error).message);
-      } finally {
-        setIsUploadingDoc(false);
-      }
-    } else if (pw !== null) {
-      alert("የይለፍ ቃል ልክ አይደለም!");
-    }
-  };
-
-  // Cross-reference link of a family member from physical printed IDs inventory matching the household houseNumber
-  const handleLinkInventoryMemberToDoc = async (docId: string, name: string, idNumber: string) => {
-    setIsUploadingDoc(true);
-    try {
-      const updatedDocs = residentDocs.map(docItem => {
-        if (docItem.id === docId) {
-          const exists = docItem.members.some(m => m.fullName.toLowerCase() === name.toLowerCase());
-          if (exists) {
-            return docItem;
-          }
-          const newMB: HouseholdMember = {
-            id: 'memb_inv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            fullName: name.trim(),
-            role: 'ቤተሰብ',
-            idNumber: idNumber || undefined
-          };
-          return {
-            ...docItem,
-            members: [...docItem.members, newMB]
-          };
-        }
-        return docItem;
-      });
-
-      if (!isFirebaseMock) {
-        const docToUpdate = updatedDocs.find(d => d.id === docId);
-        if (docToUpdate) {
-          const { id, ...firebaseData } = docToUpdate;
-          await setDoc(doc(db, 'residentDocuments', docId), firebaseData);
-        }
-      }
-
-      setResidentDocs(updatedDocs);
-      saveState('W05_residentDocs', updatedDocs);
-      alert(`"${name}" በተዋረድ የቤት ባለቤቱ ስር በቆንጆ የቤተሰብ ሰንጠረዥ ውስጥ በተሳካ ሁኔታ ተካቷል!`);
-    } catch (err) {
-      alert("ማገናኘት አልተቻለም: " + (err as Error).message);
-    } finally {
-      setIsUploadingDoc(false);
-    }
-  };
-
-  // Delete a specific scanned page/file from an existing house record
-  const handleDeleteFileFromDoc = async (docId: string, fileId: string) => {
-    if (window.confirm("እርግጠኛ ነዎት ይህንን የተቃኘ ገጽ ብቻ ከማህደሩ ላይ ማስወገድ ይፈልጋሉ?")) {
-      const updatedDocs = residentDocs.map(docItem => {
-        if (docItem.id === docId) {
-          return {
-            ...docItem,
-            files: docItem.files.filter(f => f.id !== fileId)
-          };
-        }
-        return docItem;
-      });
-
-      const updatedDoc = updatedDocs.find(d => d.id === docId);
-      if (updatedDoc) {
-        if (!isFirebaseMock) {
-          try {
-            await setDoc(doc(db, 'residentDocuments', docId), updatedDoc);
-          } catch (e) {
-            console.error("Firestore update failed:", e);
-          }
-        }
-        setResidentDocs(updatedDocs);
-        saveState('W05_residentDocs', updatedDocs);
-        setSelectedViewDoc(updatedDoc); // refresh dynamic screen modal preview active states
-        alert("የተመረጠው የተቃኘ ገጽ ተወግዷል!");
-      }
-    }
-  };
-
-  // Append new scanned files to an existing house record
-  const handleAddNewFilesToDoc = async (docId: string, newFiles: ScannedFile[]) => {
-    if (newFiles.length === 0) return;
-    const updatedDocs = residentDocs.map(docItem => {
-      if (docItem.id === docId) {
-        return {
-          ...docItem,
-          files: [...docItem.files, ...newFiles]
-        };
-      }
-      return docItem;
-    });
-
-    const updatedDoc = updatedDocs.find(d => d.id === docId);
-    if (updatedDoc) {
-      if (!isFirebaseMock) {
-        try {
-          await setDoc(doc(db, 'residentDocuments', docId), updatedDoc);
-        } catch (e) {
-          console.error("Firestore update failed:", e);
-        }
-      }
-      setResidentDocs(updatedDocs);
-      saveState('W05_residentDocs', updatedDocs);
-      setSelectedViewDoc(updatedDoc); // refresh active viewer
-      alert("ተጨማሪ የተቃኙ ገጾች ከተበታተኑ ፋይሎች ላይ ተያይዘዋል!");
-    }
-  };
-
-  // Register an additional family member to an existing house record directly
-  const handleAddNewMemberToDoc = async (docId: string, member: HouseholdMember) => {
-    const updatedDocs = residentDocs.map(docItem => {
-      if (docItem.id === docId) {
-        return {
-          ...docItem,
-          members: [...docItem.members, member]
-        };
-      }
-      return docItem;
-    });
-
-    const updatedDoc = updatedDocs.find(d => d.id === docId);
-    if (updatedDoc) {
-      if (!isFirebaseMock) {
-        try {
-          await setDoc(doc(db, 'residentDocuments', docId), updatedDoc);
-        } catch (e) {
-          console.error("Firestore update failed:", e);
-        }
-      }
-      setResidentDocs(updatedDocs);
-      saveState('W05_residentDocs', updatedDocs);
-      setSelectedViewDoc(updatedDoc); // refresh active viewer
-      alert("አዲስ ነዋሪ በቤቱ መዝገብ ውስጥ በተሳካ ሁኔታ ተመዝግቧል!");
-    }
-  };
-
-  // Delete a specific family member from a house record
-  const handleDeleteMemberFromDoc = async (docId: string, memberId: string) => {
-    if (window.confirm("እርግጠኛ ነዎት ይህንን ነዋሪ ከዚህ ቤት መዝገብ ላይ መሰረዝ ይፈልጋሉ?")) {
-      const updatedDocs = residentDocs.map(docItem => {
-        if (docItem.id === docId) {
-          return {
-            ...docItem,
-            members: docItem.members.filter(m => m.id !== memberId)
-          };
-        }
-        return docItem;
-      });
-
-      const updatedDoc = updatedDocs.find(d => d.id === docId);
-      if (updatedDoc) {
-        if (!isFirebaseMock) {
-          try {
-            await setDoc(doc(db, 'residentDocuments', docId), updatedDoc);
-          } catch (e) {
-            console.error("Firestore update failed:", e);
-          }
-        }
-        setResidentDocs(updatedDocs);
-        saveState('W05_residentDocs', updatedDocs);
-        setSelectedViewDoc(updatedDoc); // refresh active viewer
-        alert("ነዋሪው ከቤቱ ተሰርዟል!");
-      }
-    }
-  };
 
   // Filter logs logic
   const filteredForm010 = form010.filter(row => {
     const matchType = (f10FilterServiceType === 'all') || row.type.includes(f10FilterServiceType);
     const matchSerial = (f10FilterSerial === '') || row.from.toLowerCase().includes(f10FilterSerial.toLowerCase()) || row.to.toLowerCase().includes(f10FilterSerial.toLowerCase());
     const matchDate = matchEthDates(row.date, f10FilterDate);
-    return matchType && matchSerial && matchDate;
+    const matchHandover = (f10FilterHandoverType === 'all') || (row.handoverType === f10FilterHandoverType) || (!row.handoverType && f10FilterHandoverType === 'የክፍለከተማ መረካከቢያ');
+    return matchType && matchSerial && matchDate && matchHandover;
   });
 
   const filteredForm011 = form011.filter(row => {
@@ -2487,12 +2901,505 @@ export default function App() {
     const resCount = generatedDocs.filter(d => d.type === DocumentType.RESIDENCY).length;
     const lifeCount = generatedDocs.filter(d => d.type === DocumentType.LIFE_STATUS).length;
 
-    const text = `የወረዳ 05 የዕለቱ የሪፖርት ማጠቃለያ ማዕከል\nቀን: ${ethDateNow}\nሰዓት: ${ethTimeNow}\n-------------------------------------------------------------\n1. ዝርዝር ይፋዊ ሰነዶች ርክክብ:\n   - አጠቃላይ የተመነጩ ሰነዶች: ${docsTotal} ሰነዶች\n   - የመሸኛ መጠየቂያ ቅጾች: ${recsCount} ሪኮርድ\n   - የነዋሪነት ማረጋገጫ ደብዳቤዎች: ${resCount} ሪኮርድ\n   - በሕይወት የመኖር ማረጋገጫዎች: ${lifeCount} ሪኮርድ\n2. የመታወቂያ ክምችት ሁኔታ (Stock Backlog):\n   - ለመረከብ ዝግጁ የሆኑ: ${countReady} መታወቂያዎች\n   - ዛሬ የተረከቡ: ${countDeliveredToday} መታወቂያዎች\n   - ጠቅላላ የተረከቡ: ${countDelivered} መታወቂያዎች\n3. የቅጾች የዕለት መዝገብ አመላካች:\n   - ቅጽ 010 (የዕለት ህትመት ስርጭት): ${form010.length} ሪኮርዶች\n   - ቅጽ 011 (የዕለት አገልግሎት ያገኙ): ${form011.length} ሪኮርዶች\n   - ቅጽ 012 (ተመላሽና የተበላሹ): ${form012.length} ሪኮርዶች\n-------------------------------------------------------------\n* ይህ ሪፖርት በራስ-ሰር የተጠናቀረ እውነተኛ መረጃ ነው።`;
+    const text = `የወረዳ 05 የዕለቱ የሪፖርት ማጠቃለያ ማዕከል\nቀን: ${ethDateNow}\nሰዓት: ${ethTimeNow}\n-------------------------------------------------------------\n1. ዝርዝር ይፋዊ ሰነዶች ርክክብ:\n   - አጠቃላይ የተመነጩ ሰነዶች: ${docsTotal} ሰነዶች\n   - የመሸኛ መጠየቂያ ቅጾች: ${recsCount} ሪኮርድ\n   - የነዋሪነት ማረጋገጫ ደብዳቤዎች: ${resCount} ሪኮርድ\n   - በሕይወት የመኖር ማረጋገጫዎች: ${lifeCount} ሪኮርድ\n2. የመታወቂያ ክምችት ሁኔታ (Stock Backlog):\n   - ለመረከብ ዝግጁ የሆኑ: ${countReady} መታወቂያዎች\n   - ዛሬ የተረከቡ: ${countDeliveredToday} መታወቂያዎች\n   - ጠቅላላ የተረከቡ: ${countDelivered} መታወቂያዎች\n3. የቅፆች የዕለት መዝገብ አመላካች:\n   - ቅፅ 010 (የዕለት ህትመት ስርጭት): ${form010.length} ሪኮርዶች\n   - ቅፅ 011 (የዕለት አገልግሎት ያገኙ): ${form011.length} ሪኮርዶች\n   - ቅፅ 012 (ተመላሽና የተበላሹ): ${form012.length} ሪኮርዶች\n-------------------------------------------------------------\n* ይህ ሪፖርት በራስ-ሰር የተጠናቀረ እውነተኛ መረጃ ነው።`;
     setReportResult(text);
   };
 
+
+  // Modern Audit Report Printing Helper
+  const handlePrintAuditReport = () => {
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+
+    const title = `የሰነድ ቁጥጥር እና የኦዲት መከታተያ ሪፖርት - ${selectedWoreda}`;
+    const subtitle = `የቦሌ ክፍለ ከተማ ወረዳ 05 አስተዳደር የኦዲት መረጃዎች ማጠቃለያ`;
+
+    const doc = printFrame.contentWindow?.document;
+    if (!doc) return;
+
+    // Apply from-to date filters if active
+    const fromStr = (auditFilterFromDay && auditFilterFromMonth && auditFilterFromYear) ? `${auditFilterFromDay}/${auditFilterFromMonth}/${auditFilterFromYear}` : '';
+    const toStr = (auditFilterToDay && auditFilterToMonth && auditFilterToYear) ? `${auditFilterToDay}/${auditFilterToMonth}/${auditFilterToYear}` : '';
+
+    const hasDateFilter = !!fromStr || !!toStr;
+
+    const activeIdInventory = hasDateFilter
+      ? idInventory.filter(x => {
+          const d = x.pickupDate || x.registrationDate || '';
+          return d ? isDateWithinRange(d, fromStr, toStr) : true;
+        })
+      : idInventory;
+
+    const activeForm010 = hasDateFilter
+      ? form010.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+      : form010;
+
+    const activeForm011 = hasDateFilter
+      ? form011.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+      : form011;
+
+    const activeForm012 = hasDateFilter
+      ? form012.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+      : form012;
+
+    const totalFromSubCity = activeIdInventory.length;
+    const readyNotPicked = activeIdInventory.filter(x => x.status === 'ለመረከብ ዝግጁ').length;
+    const pickedUp = activeIdInventory.filter(x => x.status === 'የወሰደ').length;
+    const auditMatch = totalFromSubCity === (readyNotPicked + pickedUp);
+
+    // Form 010 Sub-city Grouped
+    const form010SubCityGrouped = activeForm010
+      .filter(record => !record.handoverType || record.handoverType === 'የክፍለከተማ መረካከቢያ')
+      .reduce((acc, record) => {
+        const type = record.type || 'ያልታወቀ';
+        if (!acc[type]) {
+          acc[type] = { type, ranges: [] as { from: string; to: string }[], totalQty: 0 };
+        }
+        acc[type].ranges.push({ from: record.from, to: record.to });
+        acc[type].totalQty += Number(record.qty || 0);
+        return acc;
+      }, {} as Record<string, { type: string; ranges: { from: string; to: string }[]; totalQty: number }>);
+
+    // Form 010 Woreda Grouped
+    const form010WoredaGrouped = activeForm010
+      .filter(record => record.handoverType === 'የወረዳ መረካከቢያ')
+      .reduce((acc, record) => {
+        const type = record.type || 'ያልታወቀ';
+        if (!acc[type]) {
+          acc[type] = { type, ranges: [] as { from: string; to: string }[], totalQty: 0 };
+        }
+        acc[type].ranges.push({ from: record.from, to: record.to });
+        acc[type].totalQty += Number(record.qty || 0);
+        return acc;
+      }, {} as Record<string, { type: string; ranges: { from: string; to: string }[]; totalQty: number }>);
+
+    // Form 011 Grouped
+    const form011Grouped = activeForm011.reduce((acc, record) => {
+      const type = record.serviceType || 'ያልታወቀ';
+      if (!acc[type]) {
+        acc[type] = { type, records: [] as typeof record[] };
+      }
+      acc[type].records.push(record);
+      return acc;
+    }, {} as Record<string, { type: string; records: typeof form011 }>);
+
+    // Form 012 Grouped
+    const form012Grouped = activeForm012.reduce((acc, record) => {
+      const type = record.printType || 'ያልታወቀ';
+      if (!acc[type]) {
+        acc[type] = { type, records: [] as typeof record[] };
+      }
+      acc[type].records.push(record);
+      return acc;
+    }, {} as Record<string, { type: string; records: typeof form012 }>);
+
+    // Build Form 010 Rows HTML (Sub-city)
+    let f010SubCityRows = '';
+    const f010SubCityList = Object.values(form010SubCityGrouped) as any[];
+    if (f010SubCityList.length === 0) {
+      f010SubCityRows = `<tr><td colspan="4" style="text-align: center; padding: 12px; font-style: italic; color: #888;">ምንም የተመዘገበ የክፍለከተማ መረካከቢያ መረጃ የለም (No data)</td></tr>`;
+    } else {
+      f010SubCityList.forEach((group: any, idx) => {
+        const rangesStr = group.ranges.map((r: any) => `ከ ${r.from} እስከ ${r.to}`).join(', ');
+        f010SubCityRows += `
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${group.type}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-family: monospace;">${rangesStr}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; font-family: monospace;">${group.totalQty}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Build Form 010 Rows HTML (Woreda)
+    let f010WoredaRows = '';
+    const f010WoredaList = Object.values(form010WoredaGrouped) as any[];
+    if (f010WoredaList.length === 0) {
+      f010WoredaRows = `<tr><td colspan="4" style="text-align: center; padding: 12px; font-style: italic; color: #888;">ምንም የተመዘገበ የወረዳ መረካከቢያ መረጃ የለም (No data)</td></tr>`;
+    } else {
+      f010WoredaList.forEach((group: any, idx) => {
+        const rangesStr = group.ranges.map((r: any) => `ከ ${r.from} እስከ ${r.to}`).join(', ');
+        f010WoredaRows += `
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${group.type}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-family: monospace;">${rangesStr}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; font-family: monospace;">${group.totalQty}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Build Form 011 Rows HTML
+    let f011Rows = '';
+    const f011List = Object.values(form011Grouped) as any[];
+    if (f011List.length === 0) {
+      f011Rows = `<tr><td colspan="4" style="text-align: center; padding: 12px; font-style: italic; color: #888;">ምንም የተመዘገበ የቅፅ 011 መረጃ የለም (No data)</td></tr>`;
+    } else {
+      f011List.forEach((group: any, idx) => {
+        const serials = group.records.map((r: any) => r.serial).filter(Boolean);
+        const sorted = [...serials].sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+          return a.localeCompare(b);
+        });
+        const fromSerial = sorted[0] || '-';
+        const toSerial = sorted[sorted.length - 1] || '-';
+        const totalCount = group.records.length;
+
+        f011Rows += `
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${group.type}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-family: monospace;">ከ ${fromSerial} እስከ ${toSerial}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; font-family: monospace;">${totalCount}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Build Form 012 Rows HTML
+    let f012Rows = '';
+    const f012List = Object.values(form012Grouped) as any[];
+    if (f012List.length === 0) {
+      f012Rows = `<tr><td colspan="4" style="text-align: center; padding: 12px; font-style: italic; color: #888;">ምንም የተመዘገበ የቅፅ 012 መረጃ የለም (No data)</td></tr>`;
+    } else {
+      f012List.forEach((group: any, idx) => {
+        const serials = group.records.map((r: any) => r.serial).filter(Boolean);
+        const sorted = [...serials].sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+          return a.localeCompare(b);
+        });
+        const fromSerial = sorted[0] || '-';
+        const toSerial = sorted[sorted.length - 1] || '-';
+        const totalCount = group.records.length;
+
+        f012Rows += `
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${group.type}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-family: monospace;">ከ ${fromSerial} እስከ ${toSerial}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; font-family: monospace;">${totalCount}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Build detailed tables for the printed report
+    let idDetailRows = '';
+    if (activeIdInventory.length === 0) {
+      idDetailRows = `<tr><td colspan="6" style="text-align: center; padding: 10px; font-style: italic; color: #888;">ምንም ዝርዝር መረጃ የለም (No data)</td></tr>`;
+    } else {
+      activeIdInventory.forEach((row, idx) => {
+        idDetailRows += `
+          <tr>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 6px; border: 1px solid #ddd;">${row.registrationDate || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold; color: #0f405c;">${row.pickupDate || 'ያልተወሰደ'}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.name}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-family: monospace;">${row.idNumber}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${row.status}</td>
+          </tr>
+        `;
+      });
+    }
+
+    let f010DetailRows = '';
+    if (activeForm010.length === 0) {
+      f010DetailRows = `<tr><td colspan="7" style="text-align: center; padding: 10px; font-style: italic; color: #888;">ምንም ዝርዝር መረጃ የለም (No data)</td></tr>`;
+    } else {
+      activeForm010.forEach((row, idx) => {
+        f010DetailRows += `
+          <tr>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold; color: #0f405c;">${row.date}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.handoverType || 'የክፍለከተማ መረካከቢያ'}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.type}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-family: monospace;">${row.from} - ${row.to}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${row.qty}</td>
+            <td style="padding: 6px; border: 1px solid #ddd;">${row.remark || '-'}</td>
+          </tr>
+        `;
+      });
+    }
+
+    let f011DetailRows = '';
+    if (activeForm011.length === 0) {
+      f011DetailRows = `<tr><td colspan="7" style="text-align: center; padding: 10px; font-style: italic; color: #888;">ምንም ዝርዝር መረጃ የለም (No data)</td></tr>`;
+    } else {
+      activeForm011.forEach((row, idx) => {
+        f011DetailRows += `
+          <tr>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold; color: #0f405c;">${row.date}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.serviceType}</td>
+            <td style="padding: 6px; border: 1px solid #ddd;">${row.customer}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-family: monospace;">${row.serial}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-family: monospace;">${row.archive}</td>
+            <td style="padding: 6px; border: 1px solid #ddd;">${row.method}</td>
+          </tr>
+        `;
+      });
+    }
+
+    let f012DetailRows = '';
+    if (activeForm012.length === 0) {
+      f012DetailRows = `<tr><td colspan="6" style="text-align: center; padding: 10px; font-style: italic; color: #888;">ምንም ዝርዝር መረጃ የለም (No data)</td></tr>`;
+    } else {
+      activeForm012.forEach((row, idx) => {
+        f012DetailRows += `
+          <tr>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${idx + 1}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold; color: #0f405c;">${row.date}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.printType}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-family: monospace;">${row.serial}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${row.returnStatus}</td>
+            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">${row.reason}</td>
+          </tr>
+        `;
+      });
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${title}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; color: #333; line-height: 1.4; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 3px double #0f405c; padding-bottom: 15px; }
+          .header h1 { margin: 0; font-size: 20px; color: #0f405c; }
+          .header h2 { margin: 5px 0 0 0; font-size: 14px; color: #555; }
+          .meta-info { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 11px; background: #f9f9f9; padding: 10px 15px; border-radius: 6px; border: 1px solid #eee; }
+          .section { margin-bottom: 30px; }
+          .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; border-left: 4px solid #0f405c; padding-left: 8px; margin-bottom: 12px; color: #0f405c; }
+          table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }
+          th { background-color: #f0f5f7; color: #0f405c; padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: left; }
+          td { padding: 8px 10px; border: 1px solid #ddd; }
+          .reconciliation-box { background: #e6f4ea; border: 1px solid #34a853; border-radius: 8px; padding: 15px; margin-bottom: 25px; }
+          .reconciliation-box h3 { margin: 0 0 10px 0; font-size: 12px; color: #137333; display: flex; align-items: center; }
+          .reconciliation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 10px; }
+          .reconciliation-card { background: white; padding: 10px; border-radius: 4px; border: 1px solid #ceead6; text-align: center; }
+          .reconciliation-card span { display: block; font-size: 10px; color: #666; font-weight: bold; }
+          .reconciliation-card strong { font-size: 16px; color: #111; }
+          .footer { text-align: center; margin-top: 50px; font-size: 9px; color: #888; border-top: 1px solid #eee; padding-top: 15px; }
+          @media print {
+            body { margin: 15px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${title}</h1>
+          <h2>${subtitle}</h2>
+        </div>
+
+        <div class="meta-info">
+          <div><strong>ወረዳ:</strong> ${selectedWoreda}</div>
+          <div><strong>ሪፖርት ያወጣው:</strong> የወረዳ 05 አስተዳዳሪ</div>
+          <div>
+            <strong>ቀን:</strong> ${ethDateNow} (${ethTimeNow})
+            ${hasDateFilter ? `<br/><span style="color:#c2410c; font-weight:bold; font-size:10px;">የኦዲት መፈለጊያ ክልል፡ ከ ${fromStr || 'ማንኛውም'} እስከ ${toStr || 'ማንኛውም'}</span>` : ''}
+          </div>
+        </div>
+
+        <!-- 1. ID HANDOVER AUDIT SUMMARY ONLY -->
+        <div class="section">
+          <div class="section-title">ክፍል 1፡ የመታወቂያ ርክክብ ኦዲት ማጠቃለያ (ID Handover Audit Summary)</div>
+          <div class="reconciliation-box">
+            <h3>✅ የመታወቂያ ክምችት ኦዲት ማረጋገጫ (ID Stock Audit Verification)</h3>
+            <div style="font-size: 11px; color: #137333; font-weight: bold; margin-bottom: 12px;">
+              የኦዲት ሁኔታ: ${auditMatch ? '✓ ሙሉ በሙሉ የተሳካ (ሁሉም ቁጥሮች ተጣጥመዋል)' : '⚠ ልዩነት አለ (እባክዎ መዝገቡን ያጣሩ)'}
+            </div>
+            <div class="reconciliation-grid">
+              <div class="reconciliation-card">
+                <span>አጠቃላይ ከክፍለ ከተማ የመጡ</span>
+                <strong>${totalFromSubCity}</strong>
+              </div>
+              <div class="reconciliation-card">
+                <span>ምዝገባ እንዳለቀ ያልወሰዱ</span>
+                <strong>${readyNotPicked}</strong>
+              </div>
+              <div class="reconciliation-card">
+                <span>የወሰዱ (ርክክብ የተጠናቀቀ)</span>
+                <strong>${pickedUp}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2ሀ. FORM 010 AUDIT - SUB-CITY -->
+        <div class="section">
+          <div class="section-title">ክፍል 2ሀ፡ ከክፍለ ከተማ የተረከብናቸው ቅፆች ኦዲት (ቅፅ 010 - የክፍለከተማ መረካከቢያ)</div>
+          <h4 style="font-size: 11px; font-weight: bold; margin: 5px 0; color: #0f405c;">📊 የክፍለከተማ መረካከቢያ ማጠቃለያ ሰንጠረዥ (Grouped Summary)</h4>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60px; text-align: center;">ተ.ቁ</th>
+                <th>የኩነት አይነት (Event Type)</th>
+                <th style="text-align: center;">የሰሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                <th style="width: 120px; text-align: center;">ድምር ብዛት (Sum Qty)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f010SubCityRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 2ለ. FORM 010 AUDIT - WOREDA -->
+        <div class="section">
+          <div class="section-title">ክፍል 2ለ፡ በወረዳ የተረከብናቸው/ያሰራጨናቸው ቅፆች ኦዲት (ቅፅ 010 - የወረዳ መረካከቢያ)</div>
+          <h4 style="font-size: 11px; font-weight: bold; margin: 5px 0; color: #0f405c;">📊 የወረዳ መረካከቢያ ማጠቃለያ ሰንጠረዥ (Grouped Summary)</h4>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60px; text-align: center;">ተ.ቁ</th>
+                <th>የኩነት አይነት (Event Type)</th>
+                <th style="text-align: center;">የሰሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                <th style="width: 120px; text-align: center;">ድምር ብዛት (Sum Qty)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f010WoredaRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- FORM 010 DETAILED DAILY HANDOVER RECORDS (BOTH TYPES) -->
+        <div class="section">
+          <div class="section-title">የቅፅ 010 ዝርዝር ርክክብ መዝገቦች (Detailed Daily Handover Records - All Types)</div>
+          <table>
+            <thead>
+              <tr style="background-color: #f9f9f9;">
+                <th style="width: 40px; text-align: center; padding: 6px;">ተ.ቁ</th>
+                <th style="padding: 6px;">የተረካከቡበት ቀን</th>
+                <th style="padding: 6px;">የመረካከቢያ ዓይነት</th>
+                <th style="padding: 6px;">የህትመት አይነት</th>
+                <th style="padding: 6px; text-align: center;">ሴሪያል ክልል</th>
+                <th style="padding: 6px; text-align: center;">ብዛት</th>
+                <th style="padding: 6px;">ማስታወሻ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f010DetailRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 3. FORM 011 AUDIT -->
+        <div class="section">
+          <div class="section-title">ክፍል 3፡ በወረዳ አገልግሎት የተሰጠባቸው ቅፆች ኦዲት (ቅፅ 011)</div>
+          <h4 style="font-size: 11px; font-weight: bold; margin: 5px 0; color: #0f405c;">📊 የማጠቃለያ ሰንጠረዥ (Grouped Summary)</h4>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60px; text-align: center;">ተ.ቁ</th>
+                <th>የኩነት አይነት (Event Type)</th>
+                <th style="text-align: center;">የሴሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                <th style="width: 120px; text-align: center;">ድምር ብዛት (Sum Qty)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f011Rows}
+            </tbody>
+          </table>
+
+          <h4 style="font-size: 11px; font-weight: bold; margin: 15px 0 5px 0; color: #444;">📋 የቅፅ 011 ዝርዝር የአገልግሎት መዝገቦች (Detailed Service Log)</h4>
+          <table>
+            <thead>
+              <tr style="background-color: #f9f9f9;">
+                <th style="width: 40px; text-align: center; padding: 6px;">ተ.ቁ</th>
+                <th style="padding: 6px;">የተሰጠበት ቀን</th>
+                <th style="padding: 6px;">የአገልግሎት አይነት</th>
+                <th style="padding: 6px;">የተገልጋይ ስም</th>
+                <th style="padding: 6px; text-align: center;">ሴሪያል ቁጥር</th>
+                <th style="padding: 6px; text-align: center;">አቃፊ/አርካይቭ</th>
+                <th style="padding: 6px;">ዘዴ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f011DetailRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 4. FORM 012 AUDIT -->
+        <div class="section">
+          <div class="section-title">ክፍል 4፡ የባከኑና ያልተሰጡ ቅፆች ኦዲት (ቅፅ 012)</div>
+          <h4 style="font-size: 11px; font-weight: bold; margin: 5px 0; color: #0f405c;">📊 የማጠቃለያ ሰንጠረዥ (Grouped Summary)</h4>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60px; text-align: center;">ተ.ቁ</th>
+                <th>የኩነት አይነት (Event Type)</th>
+                <th style="text-align: center;">የሴሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                <th style="width: 120px; text-align: center;">ድምር ብዛት (Sum Qty)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f012Rows}
+            </tbody>
+          </table>
+
+          <h4 style="font-size: 11px; font-weight: bold; margin: 15px 0 5px 0; color: #444;">🗑 የቅፅ 012 ዝርዝር የባከኑና ተመላሽ ቅጾች መዝገቦች (Detailed Spoiled/Returned Records)</h4>
+          <table>
+            <thead>
+              <tr style="background-color: #f9f9f9;">
+                <th style="width: 40px; text-align: center; padding: 6px;">ተ.ቁ</th>
+                <th style="padding: 6px;">የተበላሸበት/የተመለሰበት ቀን</th>
+                <th style="padding: 6px;">የህትመት አይነት</th>
+                <th style="padding: 6px; text-align: center;">ሴሪያል ቁጥር</th>
+                <th style="padding: 6px; text-align: center;">ሁኔታ</th>
+                <th style="padding: 6px;">የተበላሸበት/ያልተሰጠበት ምክንያት</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${f012DetailRows}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="footer">
+          ይህ ሰነድ በቦሌ ወረዳ 05 የነዋሪዎች መታወቂያ ዲጂታል ማህደር በራስ-ሰር የተፈጠረ እውነተኛ የኦዲት መከታተያ ሪፖርት ነው።
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.focus();
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      printFrame.contentWindow?.focus();
+      printFrame.contentWindow?.print();
+      document.body.removeChild(printFrame);
+    }, 500);
+  };
+
   // Export report as Amharic CSV helper
-  const exportToCSV = (formType: 'f010' | 'f011' | 'f012' | 'docs') => {
+  const exportToCSV = (formType: 'f010' | 'f011' | 'f012' | 'docs' | 'audit') => {
     let csvContent = "\uFEFF"; // UTF-8 BOM byte order mark to display Amharic correctly in Excel
     
     if (formType === 'f010') {
@@ -2509,6 +3416,11 @@ export default function App() {
       csvContent += "ተ.ቁ,የህትመት አይነት,አገልግሎት ላይ ያልዋለ,የተበላሸ,በማኑዋል,በሲስተም,ሰሪያል ቁጥር,ቀን,የተበላሸበት ምክንያት\n";
       form012.forEach((row, i) => {
         csvContent += `"${i+1}","${row.printType}","${row.returnStatus==='ያልተሰጠ'?'✓':''}","${row.returnStatus==='የተበላሸ'?'✓':''}","${row.method==='ማኑዋል'?'✓':''}","${row.method==='ሲስተም'?'✓':''}","${row.serial}","${row.date}","${row.reason}"\n`;
+      });
+    } else if (formType === 'audit') {
+      csvContent += "ተ.ቁ,ሰዓትና ቀን,ወረዳ,የድርጊቱ አይነት,የባለሙያ ስም,ዝርዝር መግለጫ\n";
+      filteredAuditLogs.forEach((row, i) => {
+        csvContent += `"${i+1}","${row.timestamp}","${row.woreda || ''}","${row.action}","${row.operator}","${row.details}"\n`;
       });
     } else {
       csvContent += "ተ.ቁ,የሰነድ ማጣቀሻ ቁጥር,የሰነድ አይነት,የአመልካች ስም,የቤት ቁጥር,የተመዘገበበት ቀን\n";
@@ -2527,474 +3439,1026 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // Export collected IDs only ('የወሰደ') as Excel-ready Amharic CSV
-  const exportDeliveredIDsToExcel = () => {
+  // Export active entries in the ID handover table as Excel-ready Amharic CSV
+  const exportCurrentTableToExcel = () => {
     let csvContent = "\uFEFF"; // UTF-8 BOM byte order mark to display Amharic correctly in Excel
-    csvContent += "ተ.ቁ,የተረካቢ ሙሉ ስም,መታወቂያ ቁጥር,የቤት ቁጥር,ስልክ ቁጥር,ርክክብ የተደረገበት ቀን,የርክክብ ሁኔታ\n";
+    csvContent += "ተ.ቁ,ሙሉ ስም,መታወቂያ ቁጥር,የቤት ቁጥር,ስልክ ቁጥር,የመታወቂያ ሁኔታ,ርክክብ ወይም መልዕክት የተደረገበት ቀን,ምልክት (Signature)\n";
     
-    const deliveredList = idInventory.filter(item => item.status === 'የወሰደ');
-    
-    deliveredList.forEach((row, i) => {
-      const signatureStatus = row.pickupSignature ? "በፊርማ የተረጋገጠ (Signed)" : "የወሰደ/ተረክቧል (Delivered)";
-      csvContent += `"${i+1}","${row.name}","${row.idNumber}","${row.houseNumber}","${row.phone}","${row.pickupDate || ethDateNow}","${signatureStatus}"\n`;
+    filteredAdminInventory.forEach((row, i) => {
+      const signatureStatus = row.pickupSignature ? "በፊርማ የተረጋገጠ" : (row.status === 'የወሰደ' ? "ተረክቧል (የወሰደ)" : "በእጅ የሚገኝ / ለመረከብ ዝግጁ");
+      const statusLabel = row.status === 'የወሰደ' ? 'የወሰደ' : 'ለመረከብ ዝግጁ';
+      const eventDate = row.status === 'የወሰደ' ? (row.pickupDate || '-') : (row.smsSentDate || '-');
+      csvContent += `"${i+1}","${row.name}","${row.idNumber}","${row.houseNumber}","${row.phone}","${statusLabel}","${eventDate}","${signatureStatus}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `Bole_Woreda05_ID_Handover_Delivered_Report_${ethDateNow.replace(/\//g, '-')}.csv`);
+    
+    let fileName = `Bole_Woreda05_ID_Handover_All_Report_${ethDateNow.replace(/\//g, '-')}.csv`;
+    if (smsPendingFilter) {
+      fileName = `Bole_Woreda05_ID_SMS_Pending_Report_${ethDateNow.replace(/\//g, '-')}.csv`;
+    } else if (deliveredFilter) {
+      fileName = `Bole_Woreda05_ID_Delivered_Report_${ethDateNow.replace(/\//g, '-')}.csv`;
+    }
+    
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-slate-50 font-sans antialiased text-slate-800">
+  const isPickupInPeriod = (pickupDateStr: string | undefined, period: 'day' | 'week' | 'month') => {
+    if (!pickupDateStr) return false;
+    
+    const cleanDate = pickupDateStr.trim();
+    const parts = cleanDate.split(' ');
+    if (parts.length < 3) return false;
+    
+    const pDay = parseInt(parts[0], 10);
+    const pMonth = parts[1];
+    const pYear = parts[2];
+    
+    const nowParts = ethDateNow.split(' ');
+    if (nowParts.length < 3) return false;
+    const nDay = parseInt(nowParts[0], 10);
+    const nMonth = nowParts[1];
+    const nYear = nowParts[2];
+    
+    if (pYear !== nYear) return false;
+    
+    if (period === 'day') {
+      return pDay === nDay && pMonth === nMonth;
+    }
+    
+    if (period === 'month') {
+      return pMonth === nMonth;
+    }
+    
+    if (period === 'week') {
+      if (pMonth === nMonth) {
+        const diff = nDay - pDay;
+        return diff >= 0 && diff < 7;
+      }
       
-      {/* 1. TOP RESPONSIVE HEADER - no-print */}
-      <header className="bg-white text-slate-800 shadow-md sticky top-0 z-40 no-print border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            {/* Logo Icon as in user image */}
+      const pMonthIdx = ethMonths.indexOf(pMonth);
+      const nMonthIdx = ethMonths.indexOf(nMonth);
+      
+      if (pMonthIdx !== -1 && nMonthIdx !== -1) {
+        if (nMonthIdx - pMonthIdx === 1 || (nMonthIdx === 0 && pMonthIdx === 12)) {
+          const daysInPrevMonth = pMonth === 'ጳጉሜን' ? 6 : 30;
+          const diff = (nDay + daysInPrevMonth) - pDay;
+          return diff >= 0 && diff < 7;
+        }
+      }
+    }
+    
+    return false;
+  };
+
+  const deliveredInPeriod = idInventory.filter(item => 
+    item.status === 'የወሰደ' && isPickupInPeriod(item.pickupDate, reportPeriod)
+  );
+
+  const countDailySig = idInventory.filter(item => item.status === 'የወሰደ' && isPickupInPeriod(item.pickupDate, 'day')).length;
+  const countWeeklySig = idInventory.filter(item => item.status === 'የወሰደ' && isPickupInPeriod(item.pickupDate, 'week')).length;
+  const countMonthlySig = idInventory.filter(item => item.status === 'የወሰደ' && isPickupInPeriod(item.pickupDate, 'month')).length;
+
+  const downloadHandoverPDF = () => {
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+
+    const periodLabel = reportPeriod === 'day' ? 'የዛሬ (Daily)' : reportPeriod === 'week' ? 'የዚህ ሳምንት (Weekly)' : 'የዚህ ወር (Monthly)';
+    const title = `የሲቪል ምዝገባ እና የነዋሪነት አገልግሎት ኤጀንሲ - ቦሌ ወረዳ 05`;
+    const subtitle = `${periodLabel} የመታወቂያ ርክክብ ሪፖርት ማጠቃለያ`;
+
+    const doc = printFrame.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { text-align: center; border-bottom: 3px double #0f405c; padding-bottom: 20px; margin-bottom: 30px; }
+            .header h1 { font-size: 20px; color: #0f405c; margin: 0; font-weight: 800; }
+            .header h2 { font-size: 15px; color: #0284c7; margin: 8px 0 0 0; font-weight: 700; }
+            .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+            .meta-table td { border: none; padding: 4px 0; font-size: 12px; font-weight: bold; }
+            table.data-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+            table.data-table th { background-color: #0f405c; color: white; padding: 12px 10px; font-weight: 800; text-align: left; border: 1px solid #0f405c; }
+            table.data-table td { border: 1px solid #e2e8f0; padding: 10px; font-weight: 600; color: #334155; }
+            table.data-table tr:nth-child(even) { background-color: #f8fafc; }
+            .sig-img { height: 35px; max-width: 120px; object-fit: contain; }
+            .signatures-row { display: flex; justify-content: space-between; margin-top: 60px; }
+            .sig-col { border-top: 1.5px solid #64748b; width: 220px; text-align: center; padding-top: 8px; font-size: 12px; font-weight: bold; color: #475569; }
+            .footer { margin-top: 60px; border-top: 1px dashed #cbd5e1; padding-top: 15px; text-align: center; font-size: 11px; color: #94a3b8; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${title}</h1>
+            <h2>${subtitle}</h2>
+          </div>
+          <table class="meta-table">
+            <tr>
+              <td>ሪፖርት የወጣበት ቀን: <span style="color:#0f405c;">${ethDateNow}</span></td>
+              <td style="text-align: right;">ጠቅላላ ርክክቦች ብዛት: <span style="color:#16a34a;">${deliveredInPeriod.length} ነዋሪዎች</span></td>
+            </tr>
+            <tr>
+              <td>አውጪው ክፍል: የነዋሪዎች መታወቂያ አገልግሎት ክፍል</td>
+              <td style="text-align: right;">የሪፖርቱ ሁኔታ: በስርዓቱ የተረጋገጠ ✓</td>
+            </tr>
+          </table>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 45px; text-align: center;">ተ.ቁ</th>
+                <th>የነዋሪው ሙሉ ስም (Full Name)</th>
+                <th>የመታወቂያ ቁጥር (ID Number)</th>
+                <th>የቤት ቁጥር (House No.)</th>
+                <th>የተረከበበት ቀን (Date)</th>
+                <th style="width: 150px; text-align: center;">የተረካቢ ፊርማ (Signature)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${deliveredInPeriod.length > 0 ? 
+                deliveredInPeriod.map((item, idx) => `
+                  <tr>
+                    <td style="text-align: center; font-weight: 800;">${idx + 1}</td>
+                    <td style="font-weight: 800; color: #0f405c;">${item.name}</td>
+                    <td style="font-family: monospace; font-size: 11.5px;">${item.idNumber}</td>
+                    <td>${item.houseNumber || 'ያልተገለጸ'}</td>
+                    <td>${item.pickupDate || '-'}</td>
+                    <td style="text-align: center;">
+                      ${item.pickupSignature ? `<img class="sig-img" src="${item.pickupSignature}" />` : '<span style="color: #ef4444; font-size: 10px;">ፊርማ የለም</span>'}
+                    </td>
+                  </tr>
+                `).join('') 
+                : '<tr><td colspan="6" style="text-align: center; padding: 30px; color: #94a3b8; font-weight: bold;">በተጠቀሰው የጊዜ ገደብ ውስጥ የተረከበ ነዋሪ የለም።</td></tr>'
+              }
+            </tbody>
+          </table>
+
+          <div class="signatures-row">
+            <div class="sig-col">ያዘጋጀው ባለሙያ ፊርማ</div>
+            <div class="sig-col">የመረጃ ዴስክ ኃላፊ ፊርማ</div>
+          </div>
+
+          <div class="footer">
+            ይህ ሰነድ በቦሌ ወረዳ 05 የነዋሪዎች መታወቂያ ዲጂታል ማህደር በራስ-ሰር የተፈጠረ ህጋዊ ሪፖርት ነው።
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      printFrame.contentWindow?.focus();
+      printFrame.contentWindow?.print();
+      document.body.removeChild(printFrame);
+    }, 500);
+  };
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col font-sans">
+      {/* HEADER SECTION - Beautiful pure white header matching the uploaded image completely */}
+      <header className="bg-white border-b border-slate-200/90 shadow-xs no-print py-4.5 px-4 sm:px-6 md:px-8">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          
+          {/* Left Side: Brand Logo and Title */}
+          <div className="flex items-center gap-2.5 sm:gap-4.5">
             <img 
               src={crrsaLogo} 
               alt="CRRSA Logo" 
-              className="h-10 sm:h-12 w-auto object-contain flex-shrink-0"
-              referrerPolicy="no-referrer"
+              className="h-12 sm:h-16 md:h-[68px] object-contain shrink-0 select-none cursor-pointer transition-transform duration-250 active:scale-95" 
+              onClick={() => { setActivePortal('public'); setSelectedPublicID(null); }}
+              referrerPolicy="no-referrer" 
             />
-            <div className="flex flex-col justify-center leading-tight">
-              <div className="flex items-center space-x-2">
-                <span className="text-base sm:text-2xl font-black text-[#0f384c] tracking-tight leading-none">CRRSA</span>
-                <span className="bg-[#2a4d5f] text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase">ቦሌ ወረዳ 05</span>
+            <div className="h-9 sm:h-11 w-[1.5px] bg-slate-200 shrink-0"></div>
+            <div className="flex flex-col text-left justify-center">
+              <div className="relative">
+                <button 
+                  type="button"
+                  onClick={() => setWoredaDropdownOpen(!woredaDropdownOpen)}
+                  className="text-xs sm:text-base md:text-lg font-black text-[#0c334d] tracking-tight leading-tight flex items-center gap-1.5 hover:text-[#0284c7] transition-colors duration-200 cursor-pointer"
+                >
+                  AACRRS {selectedWoreda} ፅ/ቤት
+                  <ChevronDown className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                </button>
+                {woredaDropdownOpen && (
+                  <div className="absolute left-0 mt-2.5 w-60 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden font-bold py-1.5 text-slate-800 animate-fade-in no-print">
+                    <div className="px-3.5 py-1.5 border-b border-slate-100 text-[9.5px] text-slate-400 uppercase tracking-wider">
+                      ወረዳ ቀይር (Switch District)
+                    </div>
+                    {woredaList.map((woreda) => (
+                      <button
+                        key={woreda}
+                        type="button"
+                        onClick={() => {
+                          setSelectedWoreda(woreda);
+                          setWoredaDropdownOpen(false);
+                          logAuditAction('የወረዳ መቀየር (District Switch)', `የሚሰራበት ወረዳ ወደ ${woreda} ተቀይሯል።`);
+                        }}
+                        className={`w-full text-left px-4 py-2 hover:bg-slate-50 text-xs transition-colors duration-150 flex items-center justify-between ${selectedWoreda === woreda ? 'text-sky-600 bg-sky-50/50' : 'text-slate-700'}`}
+                      >
+                        <span>{woreda}</span>
+                        {selectedWoreda === woreda && <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
+                      </button>
+                    ))}
+                    
+                    {/* Inline Form to add a custom new woreda */}
+                    <div className="border-t border-slate-100 p-2.5 mt-1.5 space-y-1.5 bg-slate-50/50">
+                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">አዲስ ወረዳ ጨምር (Add Woreda)</div>
+                      <div className="flex gap-1.5">
+                        <input 
+                          id="newWoredaInput"
+                          type="text" 
+                          placeholder="ምሳሌ፦ ልደታ ወረዳ 08" 
+                          className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-normal text-slate-800"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const input = e.currentTarget;
+                              const val = input.value.trim();
+                              if (val) {
+                                if (!woredaList.includes(val)) {
+                                  const updated = [...woredaList, val];
+                                  setWoredaList(updated);
+                                  localStorage.setItem('W05_woredaList', JSON.stringify(updated));
+                                  setSelectedWoreda(val);
+                                  logAuditAction('አዲስ ወረዳ መመዝገብ (Register Woreda)', `አዲስ የሰነድ መቆጣጠሪያ ወረዳ [${val}] ተመዝግቧል።`);
+                                }
+                                input.value = '';
+                                setWoredaDropdownOpen(false);
+                              }
+                            }
+                          }}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const input = document.getElementById('newWoredaInput') as HTMLInputElement;
+                            const val = input?.value?.trim();
+                            if (val) {
+                              if (!woredaList.includes(val)) {
+                                const updated = [...woredaList, val];
+                                setWoredaList(updated);
+                                localStorage.setItem('W05_woredaList', JSON.stringify(updated));
+                                setSelectedWoreda(val);
+                                logAuditAction('አዲስ ወረዳ መመዝገብ (Register Woreda)', `አዲስ የሰነድ መቆጣጠሪያ ወረዳ [${val}] ተመዝግቧል።`);
+                              }
+                              input.value = '';
+                              setWoredaDropdownOpen(false);
+                            }
+                          }}
+                          className="px-2 py-1 bg-[#0c334d] hover:bg-[#072132] text-white rounded-md text-[9px] font-bold shrink-0 cursor-pointer transition"
+                        >
+                          ጨምር
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-[9px] sm:text-[11px] text-[#0f384c] font-bold mt-0.5">የሲቪል ምዝገባ እና የነዋሪነት አገልግሎት ኤጀንሲ - ቦሌ ወረዳ 05</p>
+              <span className="text-[8.5px] sm:text-[10px] text-slate-500 font-bold mt-0.5 sm:mt-1">
+                {currentLang === 'am' ? `የ${selectedWoreda} የዲጂታል ስርዓት` :
+                 currentLang === 'or' ? `Sirna Diijiitaalaa Bulchiinsa ${selectedWoreda}` :
+                 `${selectedWoreda} Digital System`}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Cloud Database Integration Status indicator & Sync trigger */}
-            <button
-              onClick={async () => {
-                if (isFirebaseMock) {
-                  alert("አገልግሎት: የ Firebase ደመና መሠረተ-ልማት ገና አልተገናኘም። መተግበሪያው በየአካባቢው (Local) ብቻ ነው የሚሰራው። እባክዎን በቀኝ በኩል የ Firebase ግንኙነትን ያዘጋጁ።");
-                } else {
-                  if (isAdminLoggedIn) {
-                     await handleSyncToCloud();
-                  } else {
-                     alert("የተገናኘ: የ Firebase ማዕከላዊ የደመና ዳታቤዝ አሁን ገቢር ነው። ሁሉም የሚገቡ አዳዲስ መረጃዎች በሁሉም ባለሙያዎች ዘንድ ወዲያውኑ ይዘመናሉ። ያሉትን ነባር መረጃዎች ወደ ደመና ለመጫን 'የባለሙያ መግቢያ' በይለፍ ቃል ገብተው 'ዳታ ስቀል' የሚለውን ምልክት ይጫኑ።");
-                  }
-                }
-              }}
-              className={`flex items-center space-x-1 px-2.5 py-2 text-[9px] font-bold rounded-xl border transition-all ${
-                isFirebaseMock 
-                  ? 'bg-amber-50 text-amber-700 border-amber-200/60 hover:bg-amber-100' 
-                  : 'bg-emerald-50 text-emerald-800 border-emerald-200/60 hover:bg-emerald-100'
-              }`}
-              title={isFirebaseMock ? "Local Mode" : "Cloud Synchronized"}
-              disabled={isSyncingToCloud}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingToCloud ? 'animate-spin' : ''}`} />
-              <span className="hidden md:inline">
-                {isSyncingToCloud ? 'በመስቀል ላይ...' : isFirebaseMock ? 'Offline (ሎካል)' : 'Cloud Active'}
-              </span>
-              {isAdminLoggedIn && !isFirebaseMock && (
-                <span className="bg-emerald-500 text-white text-[8px] px-1 py-0.5 rounded ml-1 font-extrabold shadow-sm animate-pulse">
-                  ዳታ ስቀል (Sync)
+          {/* Right Side: Navigation & Actions Controls (Matches Image Exactly) */}
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            
+            {/* Language Selection Button (Styled like the dark greyish/blueish button in image) */}
+            <div className="relative">
+              <button 
+                type="button"
+                onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                className="px-3.5 py-2.5 bg-[#2d5165] hover:bg-[#234050] border border-transparent rounded-xl text-xs sm:text-sm font-bold text-white flex items-center gap-2 cursor-pointer transition-all duration-200 shadow-xs"
+              >
+                <span className="text-base select-none">
+                  {currentLang === 'en' ? '🇺🇸' : '🇪🇹'}
                 </span>
-              )}
-            </button>
-
-            {/* Theme / Locale Indicator badge info */}
-            <div className="hidden md:flex flex-col text-right text-[10px] text-slate-500 mr-1 border-r pr-3 border-slate-200">
-              <span className="font-bold flex items-center text-slate-700"><Calendar className="w-3 h-3 text-[#2a4d5f] mr-1"                    {/* Status & Guide */}
-                    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">ሁኔታ (Status)</span>
-                        {selectedPublicID.status === 'የወሰደ' ? (
-                          <span className="px-2 py-0.5 bg-slate-600 text-white text-[8px] font-black rounded-lg">ተረክበዋል</span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-emerald-600 text-white text-[8px] font-black rounded-lg animate-pulse">ለመረከብ ዝግጁ</span>
-                        )}
-                      </div>
-
-                      <div className="text-[10px] text-slate-300 leading-relaxed font-bold">
-                        {selectedPublicID.status === 'የወሰደ' ? (
-                          <p>📅 <strong>የወሰዱበት ቀን፡</strong> {selectedPublicID.pickupDate || 'ትናንትና'}</p>
-                        ) : (
-                          <ul className="list-disc pl-3 text-cyan-100 space-y-0.5">
-                            <li>ቀዳሚ መታወቂያ ወይም የልደት ካርድ ይዘው ይምጡ</li>
-                            <li>የሚያገኙበት ቦታ: <strong>መስኮት 3 (Window 3)</strong></li>
-                          </ul>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Instant Search matches Area */}
-              {publicSearch.trim() !== "" && (
-                <div className="pt-3 border-t border-slate-100 gap-3">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-[11px] font-bold text-[#0f384c] uppercase tracking-wider">{t('searchResults')}:</span>
-                    <span className="text-[10px] font-black bg-cyan-50 text-[#0f384c] border border-cyan-100 px-2.5 py-0.5 rounded-full">
-                      {filteredPublicInventory.length} {t('foundCount')}
-                    </span>
-                  </div>
-
-                  {filteredPublicInventory.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      {filteredPublicInventory.map((item) => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => setSelectedPublicID(item)}
-                          className={`p-4 rounded-2xl border transition-all duration-300 shadow-sm flex flex-col justify-between gap-3 cursor-pointer ${selectedPublicID?.id === item.id ? 'ring-4 ring-cyan-400/60 bg-cyan-50/20 border-cyan-300' : item.status === 'የወሰደ' ? 'bg-slate-50/65 border-slate-200' : 'bg-emerald-50/40 border-emerald-250 hover:shadow-md hover:scale-[1.01]'}`}
-                        >
-                          <div className="flex justify-between items-start gap-2">
-                            <div>
-                              <h4 className="text-xs font-black text-slate-900">{item.name}</h4>
-                              <p className="text-[10px] font-mono text-slate-500 mt-1">መታወቂያ ቁጥር: <span className="font-extrabold">{item.idNumber}</span></p>
-                            </div>
-                            {item.status === 'የወሰደ' ? (
-                              <span className="text-[8px] sm:text-[9px] px-2.5 py-1 font-black bg-slate-200 text-slate-600 rounded-full select-none">
-                                የተረከበ (የወሰደ)
-                              </span>
-                            ) : (
-                              <span className="text-[8px] sm:text-[9px] px-2.5 py-1 font-black bg-emerald-600 text-white rounded-full animate-bounce select-none shadow-sm">
-                                ለመውሰድ ዝግጁ!
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px] text-slate-500 border-t border-slate-100 pt-2 font-bold font-sans">
-                            <span>ቤት ቁጥር: {item.houseNumber || 'ያልተገለጸ'}</span>
-                            {item.status === 'የወሰደ' ? (
-                              <span className="text-emerald-700">የተረከቡበት ቀን: {item.pickupDate}</span>
-                            ) : (
-                              <span className="text-[#0f384c] font-black bg-teal-50 px-2 py-0.5 rounded border border-teal-150/40">
-                                🖱️ ዝርዝር ለመመልከት ይጫኑ
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center bg-rose-50/50 border border-rose-100/60 rounded-2xl">
-                      <p className="text-xs text-rose-800 font-extrabold leading-relaxed">
-                        ⚠️ "{publicSearch}" የሚል ስም ወይም የመታወቂያ ቁጥር በስርዓቱ ውስጥ አልተገኘም።
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                        እባክዎ ትክክለኛ ስም በጥቂቱ እየጻፉ ይሞክሩ (ለምሳሌ "ዮሐንስ" በሙሉ ከመጻፍ "ዮ" ብለው ይፈልጉ)።
-                      </p>
-                    </div>
-                  )}
+                <span className="hidden sm:inline">
+                  {currentLang === 'am' ? 'አማርኛ' : currentLang === 'or' ? 'Aor' : 'English'}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-sky-200/90" />
+              </button>
+              
+              {langDropdownOpen && (
+                <div className="absolute right-0 mt-1.5 w-36 bg-white border border-slate-150 rounded-xl shadow-lg z-50 overflow-hidden font-bold py-1 text-slate-800 animate-fade-in">
+                  <button 
+                    type="button"
+                    onClick={() => { setCurrentLang('am'); setLangDropdownOpen(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 text-xs transition block"
+                  >
+                    🇪🇹 አማርኛ
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => { setCurrentLang('or'); setLangDropdownOpen(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 text-xs transition block"
+                  >
+                    🇪🇹 Afaan Oromoo
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => { setCurrentLang('en'); setLangDropdownOpen(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 text-xs transition block"
+                  >
+                    🇺🇸 English
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Requirements section was moved to top responsive hamburger menu for better mobile friendliness, showing only ID lookup and printed IDs list here */}
+            {/* Login Button (Deep blue, solid color, styled like the "Login" button in image) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (activePortal === 'public') {
+                  setActivePortal('admin');
+                } else {
+                  setActivePortal('public');
+                  setSelectedPublicID(null);
+                }
+              }}
+              className="px-5.5 py-2.5 bg-[#0c334d] hover:bg-[#072132] text-white text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 shadow-sm cursor-pointer border border-[#0c334d] active:scale-97"
+            >
+              {activePortal === 'admin' ? (currentLang === 'am' ? 'ውጣ' : 'Logout') : 'Login'}
+            </button>
 
-            {/* 3. FULL LIVE DIRECTORY LISTING AT THE BOTTOM */}
-            <div className="bg-white rounded-3xl shadow-md border border-slate-100 p-5 md:p-6 space-y-5 shadow-xs">
+            {/* Hamburger Menu (White, thin border, dark blue icon matching image) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setHamburgerMenuOpen(!hamburgerMenuOpen)}
+                className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-[#0f384c] rounded-xl transition-all duration-200 cursor-pointer shadow-3xs"
+              >
+                {hamburgerMenuOpen ? <X className="w-5 h-5 stroke-[2.5]" /> : <Menu className="w-5 h-5 stroke-[2.5]" />}
+              </button>
+
+              {/* Responsive Dropdown Menu for Hamburger */}
+              {hamburgerMenuOpen && (
+                <div className="absolute right-0 mt-2.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-3 animate-fade-in font-bold text-slate-800">
+                  <div className="border-b border-slate-100 pb-2">
+                    <h4 className="text-[11px] text-slate-400 uppercase tracking-wider">ፈጣን አማራጮች (Quick Links)</h4>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <button 
+                      onClick={() => { setActivePortal('public'); setHamburgerMenuOpen(false); }}
+                      className="w-full text-left p-2 hover:bg-sky-50 rounded-lg text-[#0f384c] flex items-center gap-2"
+                    >
+                      🗣️ የህዝብ መረጃ መግቢያ (Public Portal)
+                    </button>
+                    <button 
+                      onClick={() => { setActivePortal('admin'); setHamburgerMenuOpen(false); }}
+                      className="w-full text-left p-2 hover:bg-sky-50 rounded-lg text-[#0f384c] flex items-center gap-2"
+                    >
+                      💼 የባለሙያ መግቢያ (Expert Portal)
+                    </button>
+                    <a 
+                      href="#id-directory" 
+                      onClick={() => setHamburgerMenuOpen(false)}
+                      className="w-full text-left p-2 hover:bg-sky-50 rounded-lg text-slate-700 flex items-center gap-2 block"
+                    >
+                      🏠 የታተሙ መታወቂያዎች ማውጫ
+                    </a>
+                  </div>
+                  <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-100 text-[9.5px] text-amber-900 leading-normal">
+                    <strong>💡 ማሳሰቢያ፡</strong> ማንኛውም የአገልግሎት ጥያቄ ወይም ቅሬታ ሲኖርዎት በስራ ሰዓት በስልክ ቁጥር <strong>8484</strong> ይደውሉልን።
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+      </header>
+
+      {/* 🚥 Custom Multicolored LED Sequential Running Light Ticker (Enhanced, Wider, and highly readable) 🚥 */}
+      <div className="w-full bg-[#030610] border-y-2 border-slate-900 py-3 px-3 no-print flex flex-col items-center justify-center space-y-2.5 relative shadow-xl overflow-hidden select-none">
+        
+        {/* Upper LED Color Dot Row (Sequential Left to Right Wave) */}
+        <div className="w-full flex justify-between items-center max-w-6xl overflow-hidden px-2 gap-1.5">
+          {Array.from({ length: 36 }).map((_, i) => {
+            const colors = [
+              'bg-rose-500 shadow-rose-500/90 text-rose-400',
+              'bg-amber-400 shadow-amber-400/90 text-amber-300',
+              'bg-emerald-400 shadow-emerald-400/90 text-emerald-350',
+              'bg-cyan-400 shadow-cyan-400/90 text-cyan-300',
+              'bg-fuchsia-500 shadow-fuchsia-500/90 text-fuchsia-400',
+              'bg-sky-400 shadow-sky-400/90 text-sky-300'
+            ];
+            const colorClass = colors[i % colors.length];
+            const delay = Math.abs(18 - (i % 36)) * 0.04;
+            return (
+              <div 
+                key={`led-top-${i}`} 
+                className={`w-2 h-2 rounded-full shrink-0 shadow-xs transition-all duration-300 ${colorClass}`}
+                style={{
+                  animation: 'led-bg-pulse 1.4s ease-in-out infinite',
+                  animationDelay: `${delay}s`,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* Scrolling LED Digital Text Marquee Banner (Taller, wider, and extremely clear/readable text) */}
+        <div className="w-full max-w-6xl overflow-hidden relative h-11 flex items-center justify-center bg-[#070e1b] rounded-xl border-2 border-slate-700 shadow-md px-4">
+          <div 
+            className="whitespace-nowrap font-black text-sm sm:text-base md:text-lg tracking-[0.2em] text-center select-none"
+            style={{
+              animation: 'led-scroll-left-right 22s ease-in-out infinite, led-color-pulse 6s ease-in-out infinite'
+            }}
+          >
+            🌟 እንኳን ደህና መጡ! • AACRRS {selectedWoreda} ፅ/ቤት የዲጂታል ስርዓት • CRRSA {selectedWoreda} Digital System • 🌟
+          </div>
+        </div>
+
+        {/* Lower Opposite Flow LED Color Dot Row (Sequential Right to Left Wave) */}
+        <div className="w-full flex justify-between items-center max-w-6xl overflow-hidden px-2 gap-1.5">
+          {Array.from({ length: 36 }).map((_, i) => {
+            const colors = [
+              'bg-cyan-400 shadow-cyan-400/90 text-cyan-300',
+              'bg-emerald-400 shadow-emerald-400/90 text-emerald-350',
+              'bg-amber-400 shadow-amber-400/90 text-amber-300',
+              'bg-rose-500 shadow-rose-500/90 text-rose-400',
+              'bg-sky-400 shadow-sky-400/90 text-sky-300',
+              'bg-fuchsia-500 shadow-fuchsia-500/90 text-fuchsia-400'
+            ];
+            const colorClass = colors[i % colors.length];
+            const delay = Math.abs((i % 36) - 18) * 0.04;
+            return (
+              <div 
+                key={`led-bottom-${i}`} 
+                className={`w-2 h-2 rounded-full shrink-0 shadow-xs transition-all duration-300 ${colorClass}`}
+                style={{
+                  animation: 'led-bg-pulse 1.4s ease-in-out infinite',
+                  animationDelay: `${delay}s`,
+                }}
+              />
+            );
+          })}
+        </div>
+
+      </div>
+
+      {/* Main Container Stage wrapper */}
+      <main className="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-5 md:p-6 space-y-6 bg-white">
+        
+        {activePortal === 'public' && (
+          <>
+            <div className="w-full space-y-4">
               
-              {/* Header with status metrics */}
-              <div className="border-b border-slate-150 pb-4 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              {/* Headline & Counters Dashboard Header */}
+              <div className="bg-sky-50 rounded-2xl border border-sky-100/80 p-4.5 space-y-3 shadow-3xs">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                   <div>
-                    <h3 className="font-extrabold text-[#0a3651] text-sm md:text-base flex items-center gap-2">
+                    <h2 className="text-sm sm:text-base font-black tracking-tight text-[#0284c7] flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />
+                      መታወቂያዎ ታትሞ መድረሱን ያረጋግጡ
+                    </h2>
+                    <p className="text-[10px] sm:text-[11.5px] text-sky-800 font-extrabold max-w-xl leading-relaxed mt-0.5">
+                      መታወቂያዎ ታትሞ መድረሱን ለማረጋገጥ ስምዎን ወይም የመታወቂያ ቁጥርዎን ከታች ባለው መፈለጊያ ሳጥን ውስጥ ያስገቡ።
+                    </p>
+                  </div>
+                  
+                  {/* Compact responsive counters */}
+                  <div className="grid grid-cols-2 gap-2 bg-white/90 backdrop-blur-xs p-2 rounded-xl border border-sky-200/30 w-full md:w-auto text-center shrink-0">
+                    <div className="px-2.5 py-1 bg-sky-50 rounded-lg border border-sky-100/50">
+                      <span className="text-[8px] text-sky-600 font-black block leading-none mb-0.5">ለመረከብ ዝግጁ</span>
+                      <span className="text-base font-black text-sky-900 leading-none">{countReady}</span>
+                    </div>
+                    <div className="px-2.5 py-1 bg-emerald-50 rounded-lg border border-emerald-100/50">
+                      <span className="text-[8px] text-emerald-600 font-black block leading-none mb-0.5">የወሰዱ (የተረከቡ)</span>
+                      <span className="text-base font-black text-emerald-600 leading-none">{countDelivered}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Interactive Search Input Console */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-4 md:p-5 space-y-4 animate-fade-in">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="space-y-0.5">
+                    <h3 className="font-extrabold text-xs text-[#0f384c] flex items-center gap-2">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      ታትመው ለርክክብ የደረሱ መታወቂያዎች የቀጥታ ሙሉ ማውጫ (Printed IDs Directory)
+                      {t('quickChecker')}
                     </h3>
-                    <p className="text-[10px] text-slate-400 font-bold mt-0.5 leading-relaxed">
-                      በወረዳው ተዘጋጅተው ለርክክብ ዝግጁ የሆኑ የሁሉንም ነዋሪዎች መታወቂያ ቀጥታ ዝርዝር ከዚህ በታች መመልከት ይችላሉ።
+                    <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+                      스ምዎን (ለምሳሌ "ዮሴፍ") ወይም የመታወቂያ ቁጥርዎን ያስገቡ።
                     </p>
                   </div>
-                  <span className="px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-full text-[10px] sm:text-xs font-black border border-emerald-100 animate-pulse whitespace-nowrap">
-                    {countReady} መታወቂያ ለመረከብ ዝግጁ
-                  </span>
-                </div>
-              </div>
-
-              {/* Height-constrained scroll area to preserve gorgeous UI experience on mobile screens */}
-              <div className="overflow-x-auto border border-slate-100 rounded-2xl max-h-[380px] overflow-y-auto shadow-inner bg-slate-50/20">
-                <table className="w-full text-left border-collapse text-xs min-w-[500px]">
-                  <thead className="sticky top-0 bg-white shadow-xs z-10 border-b border-[#0a3651]/10">
-                    <tr className="bg-slate-50 text-slate-500 text-[10px] font-extrabold uppercase">
-                      <th className="p-3 text-left">የተገልጋይ ሙሉ ስም (Full Name)</th>
-                      <th className="p-3">የመታወቂያ ቁጥር (ID Number)</th>
-                      <th className="p-3">የቤት ቁጥር (House No.)</th>
-                      <th className="p-3 text-center">ሁኔታ (Status)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold bg-white">
-                    {idInventory.length > 0 ? (
-                      idInventory.map((item) => (
-                        <tr 
-                          key={item.id} 
-                          className="hover:bg-slate-50 transition duration-150"
-                        >
-                          <td className="p-3 text-left text-[#0f384c] font-black">{item.name}</td>
-                          <td className="p-3 font-mono text-[10px] text-slate-500">{item.idNumber}</td>
-                          <td className="p-3 text-slate-600 font-extrabold">{item.houseNumber}</td>
-                          <td className="p-3 text-center">
-                            {item.status === 'የወሰደ' ? (
-                              <div className="inline-flex flex-col items-center">
-                                <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[9px] border border-slate-200">
-                                  የተረከበ
-                                </span>
-                                <span className="text-[8px] text-slate-400 font-semibold mt-0.5">{item.pickupDate}</span>
-                              </div>
-                            ) : (
-                              <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[9px] border border-emerald-100 font-black animate-pulse">
-                                ለመረከብ ዝግጁ
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-slate-400 text-[10px]">
-                          በማውጫው ውስጥ ምንም መረጃ የለም።
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}� ደህና መጡ!
-                  </span>
-                  <h2 className="text-xl md:text-3xl font-extrabold tracking-tight mt-1 text-white drop-shadow-sm">
-                    መታወቂያዎ ታትሞ መድረሱን ያረጋግጡ
-                  </h2>
-                  <p className="text-xs sm:text-sm md:text-base text-cyan-200 font-bold max-w-xl leading-relaxed drop-shadow-sm">
-                    ህትመት የደረሱ መታወቂያዎችን ሁኔታ እዚህ ማረጋገጥ ይችላሉ።
-                  </p>
-                </div>
-                {/* Responsive counters */}
-                <div className="grid grid-cols-2 gap-3 bg-teal-950/80 p-4 rounded-2xl border border-teal-700/60 w-full md:w-auto text-center">
-                  <div className="px-3 py-1 bg-teal-900/40 rounded-xl">
-                    <span className="text-[9px] text-teal-200 block">ለመረከብ ዝግጁ የሆኑ</span>
-                    <span className="text-2xl font-black text-cyan-300">{countReady}</span>
-                  </div>
-                  <div className="px-3 py-1 bg-teal-900/40 rounded-xl">
-                    <span className="text-[9px] text-teal-200 block">የተረከቡ (የወሰዱ)</span>
-                    <span className="text-2xl font-black text-emerald-400">{countDelivered}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 1. HIGH-PRIORITY INTEGRATED SEARCH CONSOLE AT THE VERY TOP */}
-            <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-5 md:p-6 space-y-4 animate-fade-in animate-scale-up-soft">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div className="space-y-1">
-                  <h3 className="font-extrabold text-base md:text-lg text-[#0f384c] flex items-center gap-2">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0f384c] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-[#0f384c]"></span>
-                    </span>
-                    {t('quickChecker')}
-                  </h3>
-                  <p className="text-[10px] sm:text-xs text-slate-400 font-semibold leading-relaxed">
-                    {t('searchSubtext')}
-                  </p>
-                </div>
-                {publicSearch.trim() !== "" && (
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setPublicSearch("");
-                      setSelectedPublicID(null);
-                    }}
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-black rounded-xl transition-all"
-                  >
-                    {t('clearSearch')}
-                  </button>
-                )}
-              </div>
-
-              {/* Highly responsive sleek public live search box */}
-              <div className="relative w-full">
-                <input 
-                  type="text" 
-                  value={publicSearch}
-                  onChange={(e) => setPublicSearch(e.target.value)}
-                  placeholder={t('searchPlaceholder')}
-                  className="w-full text-xs sm:text-sm p-4 pl-12 border-2 border-teal-100 focus:border-[#0f384c] rounded-2xl focus:outline-none focus:ring-4 focus:ring-slate-150/40 bg-slate-50/50 uppercase placeholder-slate-400 font-black transition-all shadow-inner"
-                />
-                <Search className="w-5 h-5 text-[#0f384c] absolute left-4 top-4" />
-              </div>
-
-              {/* Selected ID Detail Showcase Card right here under the search if chosen */}
-              {selectedPublicID && (
-                <div className="p-5 md:p-6 bg-slate-900 text-white rounded-3xl border border-teal-500/20 shadow-xl relative overflow-hidden animate-fade-in">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400 opacity-5 rounded-full blur-2xl"></div>
-                  
-                  <div className="flex justify-between items-start border-b border-white/10 pb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 rounded-full bg-cyan-500/10 flex items-center justify-center border border-cyan-400/20 text-cyan-300">
-                        <Fingerprint className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-black tracking-wider uppercase text-cyan-300">የመታወቂያ ዝርዝር መረጃ እና ሁኔታ (ID Details Tracker)</h4>
-                        <p className="text-[9px] text-slate-400 font-bold">የቦሌ ወረዳ 05 የሲቪል ምዝገባ እና ነዋሪነት መለያ መዝገብ</p>
-                      </div>
-                    </div>
+                  {(publicSearch.trim() !== "" || publicDateSearch.trim() !== "") && (
                     <button 
                       type="button"
-                      onClick={() => setSelectedPublicID(null)}
-                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-black transition-all"
+                      onClick={() => {
+                        setPublicSearch("");
+                        setPublicDateSearch("");
+                        setSelectedPublicID(null);
+                      }}
+                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-750 text-[10px] font-black rounded-lg transition-all"
                     >
-                      እይታውን ዝጋ (Close)
+                      {t('clearSearch')}
                     </button>
+                  )}
+                </div>
+
+                {/* Sleek live search box and date filter */}
+                <div className="flex flex-col lg:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <input 
+                      type="text" 
+                      value={publicSearch}
+                      onChange={(e) => setPublicSearch(e.target.value)}
+                      placeholder={t('searchPlaceholder')}
+                      className="w-full text-xs sm:text-sm p-3.5 pl-11 border-2 border-teal-50 focus:border-[#0f384c] rounded-xl focus:outline-none focus:ring-4 focus:ring-slate-100/30 bg-slate-50/50 uppercase placeholder-slate-400 font-black transition-all shadow-inner"
+                    />
+                    <Search className="w-4 h-4 text-[#0f384c] absolute left-4 top-4" />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-4">
-                    {/* Core Details */}
-                    <div>
-                      <span className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold block">የነዋሪው ሙሉ ስም (Full Name)</span>
-                      <span className="text-sm font-black text-yellow-300">{selectedPublicID.name}</span>
+                  <div className="flex flex-col sm:flex-row gap-2 lg:w-[420px]">
+                    <div className="relative flex-1">
+                      <input 
+                        type="text" 
+                        value={publicDateSearch}
+                        onChange={(e) => setPublicDateSearch(e.target.value)}
+                        placeholder="በምዝገባ ቀን (ቀን ወር ዓ.ም)..."
+                        className="w-full text-xs p-3.5 pl-9 border-2 border-teal-50 focus:border-[#0f384c] rounded-xl focus:outline-none focus:ring-4 focus:ring-slate-100/30 bg-slate-50/50 placeholder-slate-400 font-black transition-all shadow-inner"
+                        title="ለምሳሌ፡ 26 ሰኔ 2018"
+                      />
+                      <Calendar className="w-3.5 h-3.5 text-[#0f384c] absolute left-3 top-4" />
                     </div>
-
-                    {/* Technical ID */}
-                    <div>
-                      <span className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold block">የመታወቂያ ቁጥር (ID Number)</span>
-                      <span className="text-xs font-mono font-extrabold text-cyan-400 block bg-black/40 p-2 rounded-xl border border-white/5 mt-1">{selectedPublicID.idNumber}</span>
-                    </div>
-
-                    {/* Status & Guide */}
-                    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-black">ሁኔታ (Sta              {/* Advanced Admin Navigation Tabs Menu - Organized in exactly two rows with vibrant distinct gradient theme styles */}
-              <div className="flex flex-col gap-2.5 no-print w-full">
-                {/* Row 1: Core Records & Main Archives */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 w-full">
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('residentDocs')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'residentDocs' 
-                        ? 'bg-gradient-to-r from-blue-600 via-teal-600 to-teal-500 text-white hover:brightness-105 border-transparent shadow-lg shadow-blue-100/40' 
-                        : 'bg-slate-50/80 hover:bg-blue-50/60 text-slate-700 hover:text-blue-900 border-slate-200/70 hover:border-blue-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileText className={`w-4 h-4 transition ${adminTab === 'residentDocs' ? 'text-white' : 'text-blue-600'}`} />
-                    <span>ዲጂታል ሰነድ ማህደር (Resident Docs)</span>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('handovers')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'handovers' 
-                        ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-indigo-100/40' 
-                        : 'bg-slate-50/80 hover:bg-indigo-50/60 text-slate-700 hover:text-indigo-900 border-slate-200/70 hover:border-indigo-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FolderClosed className={`w-4 h-4 transition ${adminTab === 'handovers' ? 'text-white' : 'text-indigo-600'}`} />
-                    <span>መታወቂያ ርክክብ (Handovers)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('docs')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'docs' 
-                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-550 to-teal-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-emerald-100/40 font-black' 
-                        : 'bg-slate-50/80 hover:bg-emerald-50/60 text-slate-700 hover:text-emerald-900 border-slate-200/70 hover:border-emerald-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <Layers className={`w-4 h-4 transition ${adminTab === 'docs' ? 'text-white' : 'text-emerald-600'}`} />
-                    <span>አጠቃላይ ሰነዶች (Docs)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdminTab('printingForms');
-                    }}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'printingForms' 
-                        ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white hover:brightness-105 border-transparent shadow-lg shadow-orange-100/40 font-black' 
-                        : 'bg-slate-50/80 hover:bg-orange-50/60 text-slate-705 hover:text-orange-900 border-slate-200/70 hover:border-orange-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileSpreadsheet className={`w-4 h-4 transition ${adminTab === 'printingForms' ? 'text-white' : 'text-orange-600'}`} />
-                    <span>ህትመት ቅፆች (Print Forms)</span>
-                  </button>
-                </div>
-
-                {/* Row 2: Secondary Administration & Settings */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full">
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('security')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'security' 
-                        ? 'bg-gradient-to-r from-slate-700 via-slate-800 to-slate-900 text-white hover:brightness-105 border-transparent shadow-lg shadow-slate-300/40 font-black' 
-                        : 'bg-slate-50/80 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-200/70 hover:border-slate-300 hover:shadow-sm'
-                    }`}
-                  >
-                    <Fingerprint className={`w-4 h-4 transition ${adminTab === 'security' ? 'text-white' : 'text-slate-650'}`} />
-                    <span>ደህንነት (Security)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('prerequisites')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'prerequisites' 
-                        ? 'bg-gradient-to-r from-teal-650 via-[#0a7e71] to-emerald-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-teal-100/40 font-black' 
-                        : 'bg-slate-50/80 hover:bg-teal-50/60 text-slate-700 hover:text-teal-900 border-slate-200/70 hover:border-teal-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <BookOpen className={`w-4 h-4 transition ${adminTab === 'prerequisites' ? 'text-white' : 'text-teal-600'}`} />
-                    <span>ቅድመ ሁኔታዎች (Requirements)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('smsGateway')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'smsGateway' 
-                        ? 'bg-gradient-to-r from-sky-500 via-blue-550 to-indigo-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-sky-100/40 font-black' 
-                        : 'bg-slate-50/80 hover:bg-sky-50/60 text-slate-700 hover:text-sky-900 border-slate-200/70 hover:border-sky-300 hover:shadow-sm'
-                    }`}
-                  >
-                    <Smartphone className={`w-4 h-4 transition ${adminTab === 'smsGateway' ? 'text-white' : 'text-sky-600'}`} />
-                    <span>ኤስኤምኤስ (SMS Gateway)</span>
-                  </button>
-                </div>
-              </div>t-[9px] border border-emerald-100 font-black animate-pulse">
-                                ለመረከብ ዝግጁ
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-slate-400 text-[10px]">
-                          በማውጫው ውስጥ ምንም መረጃ የለም።
-                        </td>
-                      </tr>
+                    
+                    {uniqueRegDates.length > 0 && (
+                      <select
+                        value={publicDateSearch}
+                        onChange={(e) => setPublicDateSearch(e.target.value)}
+                        className="text-xs p-3 border-2 border-teal-50 focus:border-[#0f384c] rounded-xl focus:outline-none bg-slate-50/50 font-bold max-w-full sm:max-w-[200px]"
+                      >
+                        <option value="">-- ቀንን ምረጥ (Date) --</option>
+                        {uniqueRegDates.map((dateVal) => (
+                          <option key={dateVal} value={dateVal}>{dateVal}</option>
+                        ))}
+                      </select>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+
+                {/* Active Selected ID Card Pickup details */}
+                {selectedPublicID && (
+                  <div className="bg-emerald-50/70 text-emerald-950 p-4 rounded-xl border border-emerald-100 space-y-3 animate-fade-in">
+                    <div className="flex justify-between items-center border-b border-emerald-200/50 pb-2">
+                      <span className="text-[9.5px] font-black uppercase text-emerald-800 tracking-wider">የተገኘ የመታወቂያ ዝርዝር (Selected ID Details):</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedPublicID(null)}
+                        className="text-xs font-black text-rose-700 hover:text-rose-900 bg-white shadow-3xs w-5 h-5 rounded-full flex items-center justify-center border border-slate-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <p className="text-[9px] text-slate-500 font-bold">የተገልጋይ ሙሉ ስም (Full Name)</p>
+                        <p className="font-black text-slate-800 text-xs sm:text-sm">{selectedPublicID.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-slate-500 font-bold">የመታወቂያ ቁጥር (ID Number)</p>
+                        <p className="font-black text-slate-800 font-mono text-xs">{selectedPublicID.idNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-slate-500 font-bold">የቤት ቁጥር (House No.)</p>
+                        <p className="font-black text-slate-800 text-xs">{selectedPublicID.houseNumber || 'ያልተገለጸ'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-slate-500 font-bold">የመታወቂያ ሁኔታ (Status)</p>
+                        {selectedPublicID.status === 'የወሰደ' ? (
+                          <span className="inline-flex px-2 py-0.5 bg-slate-200 text-slate-700 text-[9.5px] rounded-full font-black">
+                            ✔ የተረከበ ({selectedPublicID.pickupDate})
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 bg-emerald-600 text-white text-[9.5px] rounded-full font-black animate-pulse shadow-sm">
+                            ⭐ ለመውሰድ ዝግጁ
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {selectedPublicID.status === 'የወሰደ' && (
+                      <div className="bg-white/90 p-3 rounded-lg border border-emerald-100 text-[10px] leading-relaxed font-bold mt-2 shadow-3xs">
+                        <p className="text-slate-600">📅 ይህ መታወቂያ ቀደም ሲል በ <span className="text-slate-900 border-b border-slate-200 font-extrabold">{selectedPublicID.pickupDate || 'ትናንትና'}</span> ተረክበው ወስደዋል። እናመሰግናለን!</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Display list of search matches */}
+                {(publicSearch.trim() !== "" || publicDateSearch.trim() !== "") && (
+                  <div className="pt-2 space-y-3">
+                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-150">
+                      <span className="text-[10px] font-black text-[#0f384c] uppercase tracking-wider">{t('searchResults')}:</span>
+                      <span className="text-[10.5px] font-black bg-white text-[#0f384c] border border-cyan-150 px-2.5 py-0.5 rounded-full shadow-3xs">
+                        {filteredPublicInventory.length} {t('foundCount')}
+                      </span>
+                    </div>
+
+                    {filteredPublicInventory.length > 0 ? (
+                      <div className="space-y-4">
+                        {/* 1. Ready Section */}
+                        {filteredPublicInventory.some(item => item.status !== 'የወሰደ') && (
+                          <div className="space-y-2">
+                            <h4 className="text-[10.5px] font-extrabold text-emerald-800 flex items-center gap-1.5 px-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                              ለመውሰድ ዝግጁ የሆኑ (ያልተረከቡ)
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto pr-1">
+                              {filteredPublicInventory.filter(item => item.status !== 'የወሰደ').map((item) => (
+                                <div 
+                                  key={item.id} 
+                                  onClick={() => setSelectedPublicID(item)}
+                                  className={`p-3.5 rounded-xl border transition-all duration-300 shadow-sm flex flex-col justify-between gap-2.5 cursor-pointer ${selectedPublicID?.id === item.id ? 'ring-3 ring-cyan-400 bg-cyan-50/10 border-cyan-300' : 'bg-emerald-50/20 border-emerald-100 hover:shadow-md hover:scale-[1.01]'}`}
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div>
+                                      <h4 className="text-xs font-black text-slate-900">{item.name}</h4>
+                                      <p className="text-[9.5px] font-mono text-slate-500 mt-0.5">መታወቂያ ቁጥር: <span className="font-extrabold">{item.idNumber}</span></p>
+                                      {(item.registrationDate || item.smsSentDate) && (
+                                        <p className="text-[9px] text-teal-850 font-bold mt-1 flex items-center gap-1">
+                                          <Calendar className="w-3 h-3 text-teal-600" />
+                                          <span>የደረሰበት ቀን: {item.registrationDate || item.smsSentDate}</span>
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span className="text-[8px] px-1.5 py-0.5 font-black bg-emerald-600 text-white rounded-md animate-pulse shadow-sm">
+                                      ዝግጁ!
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9.5px] text-slate-500 border-t border-slate-100 pt-2 font-bold">
+                                    <span>ቤት ቁጥር: {item.houseNumber || 'ያልተገለጸ'}</span>
+                                    <span className="text-[#0f384c] font-black bg-teal-50/80 px-2 py-0.5 rounded border border-teal-100/50">
+                                      ዝርዝር ለመመልከት ይጫኑ
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 2. Collected Section */}
+                        {filteredPublicInventory.some(item => item.status === 'የወሰደ') && (
+                          <div className="space-y-2">
+                            <h4 className="text-[10.5px] font-extrabold text-slate-600 flex items-center gap-1.5 px-1 border-t pt-2.5 border-slate-100">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>
+                              ተረክበው የወሰዱ (ቀደም ሲል የተሰጡ)
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto pr-1">
+                              {filteredPublicInventory.filter(item => item.status === 'የወሰደ').map((item) => (
+                                <div 
+                                  key={item.id} 
+                                  onClick={() => setSelectedPublicID(item)}
+                                  className={`p-3.5 rounded-xl border transition-all duration-300 shadow-sm flex flex-col justify-between gap-2.5 cursor-pointer ${selectedPublicID?.id === item.id ? 'ring-3 ring-cyan-400 bg-cyan-50/10 border-cyan-300' : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'}`}
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div>
+                                      <h4 className="text-xs font-black text-slate-900">{item.name}</h4>
+                                      <p className="text-[9.5px] font-mono text-slate-500 mt-0.5">መታወቂያ ቁጥር: <span className="font-extrabold">{item.idNumber}</span></p>
+                                      {(item.registrationDate || item.smsSentDate) && (
+                                        <p className="text-[9px] text-teal-850 font-bold mt-1 flex items-center gap-1">
+                                          <Calendar className="w-3 h-3 text-teal-600" />
+                                          <span>የደረሰበት ቀን: {item.registrationDate || item.smsSentDate}</span>
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span className="text-[8px] px-1.5 py-0.5 font-black bg-slate-200 text-slate-600 rounded-md">
+                                      የወሰዱ
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9.5px] text-slate-500 border-t border-slate-100 pt-2 font-bold">
+                                    <span>ቤት ቁጥር: {item.houseNumber || 'ያልተገለጸ'}</span>
+                                    <span className="text-emerald-700">የተረከቡት: {item.pickupDate}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center bg-rose-50/40 border border-rose-100/60 rounded-xl">
+                        <p className="text-xs text-rose-800 font-extrabold leading-relaxed">
+                          ⚠️ "{publicSearch}" የሚል ስም ወይም የመታወቂያ ቁጥር በስርዓቱ ውስጥ አልተገኘም።
+                        </p>
+                        <p className="text-[9.5px] text-slate-400 font-semibold mt-0.5">
+                          እባክዎ በትክክል መፃፉን ያረጋግጡ (ለምሳሌ ስምዎን ሙሉ ወይም የተወሰነ ፊደላትን በማስገባት ይፈልጉ)።
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. SIDE-BY-SIDE SECTION: PREREQUISITES MANUAL & PRINTED IDS DIRECTORY GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch pt-2">
+              
+              {/* Left Column (Prerequisites & Selected Service Requirements Viewer) */}
+              <div className="bg-white rounded-3xl shadow-md border border-slate-100 overflow-hidden flex flex-col h-full transition-all duration-300">
+                {/* Header Box (Exclusive LED Marquee Ticker in Light Blue with White Text) */}
+                <div className="bg-[#f0f9ff] border-b border-sky-100 p-3 shrink-0">
+                  <div className="w-full bg-[#071e3d] border-2 border-[#0284c7] rounded-xl py-2 px-3.5 overflow-hidden select-none shadow-md">
+                    <div className="whitespace-nowrap overflow-hidden relative w-full flex items-center justify-center">
+                      <div 
+                        className="whitespace-nowrap font-black text-xs sm:text-xs tracking-wider text-white uppercase"
+                        style={{
+                          textShadow: '1px 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(255, 255, 255, 0.85)',
+                          animation: 'led-scroll-left-right 18s ease-in-out infinite'
+                        }}
+                      >
+                        🌟 የአገልግሎቶች ቅድመ ሁኔታ ማኑዋል • የቦሌ ወረዳ 05 አገልግሎት መመሪያ ማህደር 🌟
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Body Content */}
+                <div className="p-4.5 space-y-4 flex-1 flex flex-col justify-between">
+                  <div className="space-y-4">
+
+                    {/* Manual Override dropdown selector & background rotation status */}
+                    <div className="bg-[#edfafd]/50 p-3.5 rounded-2xl border border-slate-200/85 shadow-3xs space-y-2.5">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1.5">
+                        <label className="block text-[9.5px] font-black uppercase text-slate-500 tracking-wider">
+                          እጅን በራስዎ መምረጥ ከፈለጉ (Or Choose Service Manually):
+                        </label>
+                        
+                        {/* Status badge & Resume trigger */}
+                        <div className="flex items-center gap-2">
+                          {isAutoRotatePaused ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAutoRotatePaused(false);
+                                setRotateSecondsLeft(autoRotateInterval);
+                              }}
+                              className="text-[9.5px] font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition cursor-pointer"
+                              title="በየ 5 ደቂቃው በራሱ እንዲለዋወጥ መልሰው ያስጀምሩ"
+                            >
+                              <span>🔄 ራስ-ሰር ቅያሬን አስጀምር (Resume)</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[9px] font-bold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                              <span>ራስ-ሰር ቅያሬ ላይ ነው</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <select 
+                        value={selectedPublicReqId || (requirements[0]?.id || '')}
+                        onChange={(e) => handleManualReqSelect(e.target.value)}
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-[#0f405c] focus:outline-none transition-all font-bold text-slate-800 cursor-pointer shadow-3xs"
+                      >
+                        {requirements.map((req) => {
+                          let displayName = req.subCategory || req.title;
+                          if (req.id === 'req-birth') displayName = '👶 የልደት ምዝገባ';
+                          else if (req.id === 'req-marriage') displayName = '💍 የጋብቻ ምዝገባ';
+                          else if (req.id === 'req-adoption') displayName = '👪 የጉዲፈቻ ምዝገባ';
+                          else if (req.id === 'req-death') displayName = '🕊️ የሞት ምዝገባ';
+                          else if (req.id === 'req-divorce') displayName = '💔 የፍቺ ምዝገባ';
+                          else if (req.id === 'req-single') displayName = '📜 ያላገባ (ያለገባ) ምስክር ወረቀት';
+                          else if (req.id === 'req-life') displayName = '👤 በሕይወት መኖር ማረጋገጫ';
+                          else if (req.id === 'req-id-new') displayName = '🏠 አዲስ የነዋሪነት መታወቂያ';
+                          else if (req.id === 'req-id-renew') displayName = '🔄 የነዋሪነት መታወቂያ እድሳት';
+                          else if (req.id === 'req-id-replace') displayName = '⚠️ የጠፋ/የተበላሸ መታወቂያ መተኪያ';
+                          else {
+                            const prefix = req.category === 'civil' ? '📋 ' : req.category === 'residency' ? '🏠 ' : '📄 ';
+                            displayName = `${prefix}${req.subCategory || req.title}`;
+                          }
+                          return (
+                            <option key={req.id} value={req.id} className="font-bold py-1">
+                              {displayName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Prerequisite Details View */}
+                    {(() => {
+                      const reqToShow = requirements.find(r => r.id === selectedPublicReqId) || requirements[0];
+                      if (!reqToShow) {
+                        return (
+                          <div className="p-4 text-center text-slate-400 text-[10px] bg-slate-50/50 rounded-xl">
+                            ምንም የተቀመጡ የአገልግሎት መረጃዎች አልተገኙም።
+                          </div>
+                        );
+                      }
+                      
+                      // Fetch the custom LED styling for this active service
+                      const ledStyle = getServiceLedStyle(reqToShow.id);
+
+                      return (
+                        <div className="space-y-3.5 animate-fade-in">
+                          {/* Inner container with service specific theme and active glow */}
+                          <div className={`p-4 border rounded-2xl transition-all duration-300 space-y-3.5 shadow-sm hover:shadow-md ${ledStyle.bg} ${ledStyle.border} ${ledStyle.glow}`}>
+                            
+                            {/* Service Category Badge & LED Dot Indicator */}
+                            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-lg select-none">{ledStyle.emoji}</span>
+                                <span className="text-xs font-black text-slate-900">{reqToShow.title}</span>
+                              </div>
+                              {/* Pulsing LED light styled with custom service color */}
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-2.5 h-2.5 rounded-full ${ledStyle.ledDot} animate-pulse shrink-0`}></span>
+                                <span className="text-[8.5px] font-extrabold text-slate-500 uppercase tracking-widest">{ledStyle.nameAm}</span>
+                              </div>
+                            </div>
+
+                            {/* 🚥 EXCLUSIVE LOCAL DIGITAL LED TICKER FOR THIS SERVICE 🚥 */}
+                            <div className="w-full bg-[#0a0f1d] border-2 border-slate-800 rounded-xl py-2.5 px-3 overflow-hidden select-none shadow-md">
+                              <div className="whitespace-nowrap overflow-hidden relative w-full flex items-center justify-center">
+                                <div 
+                                  className="whitespace-nowrap font-mono font-bold text-[10.5px] sm:text-xs tracking-wider uppercase"
+                                  style={{
+                                    color: '#ffffff',
+                                    textShadow: '1px 1px 1px rgba(0,0,0,0.95), 0 0 3px ' + (ledStyle.ledGlowColor || 'rgba(56, 189, 248, 0.95)'),
+                                    animation: 'led-scroll-left-right 14s ease-in-out infinite'
+                                  }}
+                                >
+                                  ⭐ {ledStyle.emoji} {reqToShow.title} ⭐
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Description text block */}
+                            <p className="text-[11px] text-slate-700 font-bold leading-relaxed px-1">
+                              {reqToShow.description}
+                            </p>
+
+                            {/* Bullet requirements */}
+                            <div className="space-y-2 pt-1 px-1">
+                              <p className="text-[9.5px] uppercase tracking-wider text-slate-500 font-black">📋 የሚያስፈልጉ ሰነዶች (Required Documents):</p>
+                              <div className="space-y-1.5 max-h-[155px] overflow-y-auto pr-1">
+                                {reqToShow.points && reqToShow.points.length > 0 ? (
+                                  reqToShow.points.map((pt: string, idx: number) => (
+                                    <div key={idx} className="flex items-start space-x-2.5 text-[10px] text-slate-700 font-bold bg-white/80 hover:bg-white p-2.5 rounded-xl border border-slate-150/60 shadow-3xs transition">
+                                      <span className={`text-xs font-black select-none ${ledStyle.accent}`}>✓</span>
+                                      <span>{pt}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-[9.5px] text-slate-400 font-bold italic">ምንም አስገዳጅ ሰነድ አልተገለጸም።</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Quick Tip notice always at the bottom of the left column */}
+                  <div className="bg-amber-50/80 text-amber-900 text-[9.5px] p-2.5 rounded-xl border border-amber-150/30 font-bold flex items-start gap-1.5 leading-tight shadow-3xs mt-2">
+                    <span className="text-xs select-none leading-none">💡</span>
+                    <div>
+                      <strong>ጠቃሚ መረጃ፡</strong> ሰነዶችን ወደ መስሪያ ቤቱ ይዘው ከመምጣትዎ በፊት የቀረቡትን መስፈርቶች ማሟላትዎን ያረጋግጡ።
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column (PUBLIC LIVE PRINTED IDS DIRECTORY INVENTORY LISTING) */}
+              <div className="bg-white rounded-3xl shadow-md border border-slate-100 overflow-hidden flex flex-col h-full">
+                {/* Header Box (Exclusive LED Marquee Ticker in Light Blue with White Text) */}
+                <div className="bg-[#f0f9ff] border-b border-sky-100 p-3 shrink-0">
+                  <div className="w-full bg-[#071e3d] border-2 border-[#0284c7] rounded-xl py-2 px-3.5 overflow-hidden select-none shadow-md">
+                    <div className="whitespace-nowrap overflow-hidden relative w-full flex items-center justify-center">
+                      <div 
+                        className="whitespace-nowrap font-black text-xs sm:text-xs tracking-wider text-white uppercase"
+                        style={{
+                          textShadow: '1px 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(255, 255, 255, 0.85)',
+                          animation: 'led-scroll-left-right 18s ease-in-out infinite'
+                        }}
+                      >
+                        🌟 ታትመው ለርክክብ የደረሱ መታወቂያዎች የቀጥታ ሙሉ ማውጫ (Printed IDs Directory) 🌟
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4.5 space-y-3.5 flex flex-col flex-1">
+                  {/* Header with status metrics */}
+                  <div className="border-b border-slate-100 pb-2.5 shrink-0">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <div>
+                        <h3 className="font-extrabold text-[#0a3651] text-xs sm:text-xs flex items-center gap-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          የቀጥታ መረጃ ቋት (Live Directory Database)
+                        </h3>
+                        <p className="text-[9px] text-slate-450 font-bold mt-0.5 leading-relaxed">
+                          በወረዳው ተዘጋጅተው ለርክክብ ዝግጁ የሆኑ የነዋሪዎች መታወቂያ ቀጥታ ዝርዝር።
+                        </p>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-855 rounded-full text-[9px] font-black border border-emerald-100/55 whitespace-nowrap">
+                        {countReady} ለመረከብ ዝግጁ
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Height-flexible scroll area that stretches perfectly with left column */}
+                  <div className="overflow-x-auto border border-slate-100 rounded-xl flex-grow overflow-y-auto shadow-inner bg-slate-50/10 min-h-[300px] max-h-[415px]">
+                  <table className="w-full text-left border-collapse text-xs min-w-[320px]">
+                    <thead className="sticky top-0 bg-white shadow-xs z-10 border-b border-[#0a3651]/5">
+                      <tr className="bg-slate-50 text-slate-500 text-[9px] font-extrabold uppercase">
+                        <th className="p-2.5 text-left">የተገልጋይ ስም (Full Name)</th>
+                        <th className="p-2.5">የመታወቂያ ቁጥር (ID)</th>
+                        <th className="p-2.5">ቤት ቁጥር (House)</th>
+                        <th className="p-2.5 text-center">ሁኔታ (Status)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold bg-white text-[11px]">
+                      {(() => {
+                        const sortedPublicList = [...idInventory].sort((a, b) => {
+                          const isANew = a.id.startsWith('ID-');
+                          const isBNew = b.id.startsWith('ID-');
+                          if (isANew && !isBNew) return -1;
+                          if (!isANew && isBNew) return 1;
+                          return b.id.localeCompare(a.id);
+                        });
+                        return sortedPublicList.length > 0 ? (
+                          sortedPublicList.map((item) => (
+                            <tr 
+                              key={item.id} 
+                              onClick={() => {
+                                setSelectedPublicID(item);
+                                // Scroll up smoothly to see selected details in the checker
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className={`hover:bg-slate-50/55 cursor-pointer transition duration-150 ${selectedPublicID?.id === item.id ? 'bg-cyan-50/15' : ''}`}
+                            >
+                              <td className="p-2.5 text-left text-[#0f384c] font-black">{item.name}</td>
+                              <td className="p-2.5 font-mono text-[9px] text-slate-450">{item.idNumber}</td>
+                              <td className="p-2.5 text-slate-550 font-extrabold">{item.houseNumber}</td>
+                              <td className="p-2.5 text-center">
+                                {item.status === 'የወሰደ' ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[8.5px] border border-slate-200">
+                                      የተረከበ
+                                    </span>
+                                    <span className="text-[7.5px] text-slate-400 font-semibold mt-0.5">{item.pickupDate}</span>
+                                  </div>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[8.5px] border border-emerald-100 font-black">
+                                    ለመረከብ ዝግጁ
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="p-6 text-center text-slate-400 text-[9.5px]">
+                              በማውጫው ውስጥ ምንም መረጃ የለም።
+                            </td>
+                          </tr>
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </>
+      )}
 
-        {/* ADMIN STAFF LOGIN PORTAL */}
         {activePortal === 'admin' && !isAdminLoggedIn && (
           <div className="max-w-md mx-auto my-12 bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden animate-fade-in no-print bg-[#edfafd]/10 animate-fade-in">
             <div className="h-2 bg-gradient-to-r from-teal-850 to-cyan-650"></div>
@@ -3058,168 +4522,165 @@ export default function App() {
           <div className="space-y-6">
             {/* Admin Header / Portal Selector & Tabs Panel */}
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col space-y-4 no-print">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3.5 gap-3">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 bg-teal-50 text-[#0f384c] rounded-2xl border border-teal-100">
-                    <ShieldCheck className="w-6 h-6 text-teal-850" />
+              {/* Exclusive LED Marquee Ticker Header Block */}
+              <div className="bg-[#f0f9ff] border border-sky-100 rounded-2xl p-3 shrink-0">
+                <div className="w-full bg-[#071e3d] border-2 border-[#0284c7] rounded-xl py-2 px-3.5 overflow-hidden select-none shadow-md flex items-center justify-between gap-3">
+                  <div className="shrink-0 p-1 bg-white/15 rounded-lg border border-white/20">
+                    <ShieldCheck className="w-4.5 h-4.5 text-white animate-pulse" />
                   </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-black text-[#0f384c] tracking-wide">የወረዳ ባለሙያ አስተዳደር ወለል (Staff Admin Portal)</h2>
-                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">የቦሌ ወረዳ 05 የሲቪል ምዝገባ፣ መታወቂያ ርክክብ እና ሰነዶች መቆጣጠሪያ</p>
+                  <div className="whitespace-nowrap overflow-hidden relative w-full flex-1">
+                    <div 
+                      className="whitespace-nowrap font-black text-xs sm:text-xs tracking-wider text-white uppercase"
+                      style={{
+                        textShadow: '1px 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(255, 255, 255, 0.85)',
+                        animation: 'led-scroll-left-right 20s ease-in-out infinite'
+                      }}
+                    >
+                      🌟 የወረዳ ባለሙያ አስተዳደር ወለል (Staff Admin Portal) • የቦሌ ወረዳ 05 የሲቪል ምዝገባ፣ መታወቂያ ርክክብ እና ሰነዶች መቆጣጠሪያ 🌟
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1.5 bg-sky-950/40 border border-white/10 px-2 py-0.5 rounded-full text-[8.5px] font-black text-sky-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>ACTIVE STAFF SESSION</span>
                   </div>
                 </div>
-                
-                {/* Full Width / Half Width Toggle of Resident Docs archive */}
-                {adminTab === 'residentDocs' && (
-                  <button
-                    type="button"
-                    onClick={() => setIsDocsFullWidth(!isDocsFullWidth)}
-                    className="flex items-center space-x-1.5 bg-slate-50 hover:bg-slate-150 text-[#0f384c] px-3.5 py-2 rounded-xl text-[10.5px] font-black border border-slate-200 transition duration-150 cursor-pointer animate-none"
-                  >
-                    {isDocsFullWidth ? (
-                      <>
-                        <Columns className="w-3.5 h-3.5 text-teal-600" />
-                        <span>ምዝገባ ፎርም አሳይ (Split Layout)</span>
-                      </>
-                    ) : (
-                      <>
-                        <Maximize2 className="w-3.5 h-3.5 text-teal-600" />
-                        <span>маህደሩን በሙሉ ስክሪን ክፈት (Full Width)</span>
-                      </>
-                    )}
-                  </button>
-                )}
               </div>
 
-              {/* Advanced Admin Navigation Tabs Menu - Organized in exactly two rows with vibrant distinct gradient theme styles */}
-              <div className="flex flex-col gap-2.5 no-print w-full">
-                {/* Row 1: Core Records & Main Archives */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 w-full">
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('residentDocs')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'residentDocs' 
-                        ? 'bg-gradient-to-r from-blue-600 via-teal-600 to-teal-500 text-white hover:brightness-105 border-transparent shadow-lg shadow-blue-100/40' 
-                        : 'bg-slate-50/80 hover:bg-blue-55/60 text-slate-700 hover:text-blue-900 border-slate-200/70 hover:border-blue-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileText className={`w-4 h-4 transition ${adminTab === 'residentDocs' ? 'text-white' : 'text-blue-600'}`} />
-                    <span>ዲጂታል ሰነድ ማህደር (Resident Docs)</span>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('handovers')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'handovers' 
-                        ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-indigo-100/40' 
-                        : 'bg-slate-50/80 hover:bg-indigo-55/60 text-slate-700 hover:text-indigo-900 border-slate-200/70 hover:border-indigo-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FolderClosed className={`w-4 h-4 transition ${adminTab === 'handovers' ? 'text-white' : 'text-indigo-600'}`} />
-                    <span>መታወቂያ ርክክብ (Handovers)</span>
-                  </button>
+              {/* Advanced Admin Navigation Tabs Menu - Organized in elegant horizontal grid layout with elevated fonts */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4 w-full no-print">
+                   <button
+                     type="button"
+                     onClick={() => setAdminTab('handovers')}
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                       adminTab === 'handovers' 
+                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <FolderClosed className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'handovers' ? 'text-teal-300 scale-110' : 'text-indigo-600'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                       መታወቂያ ርክክብ
+                       <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">Handovers</span>
+                     </span>
+                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('docs')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'docs' 
-                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-550 to-teal-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-emerald-100/40' 
-                        : 'bg-slate-50/80 hover:bg-emerald-55/60 text-slate-700 hover:text-emerald-900 border-slate-200/70 hover:border-emerald-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <Layers className={`w-4 h-4 transition ${adminTab === 'docs' ? 'text-white' : 'text-emerald-600'}`} />
-                    <span>አጠቃላይ ሰነዶች (Docs)</span>
-                  </button>
+                   <button
+                     type="button"
+                     onClick={() => setAdminTab('docs')}
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                       adminTab === 'docs' 
+                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <Layers className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'docs' ? 'text-amber-300 scale-110' : 'text-emerald-600'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                       አጠቃላይ ሰነዶች
+                       <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">Docs</span>
+                     </span>
+                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('form010')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'form010' 
-                        ? 'bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 text-white hover:brightness-105 border-transparent shadow-lg shadow-orange-100/40' 
-                        : 'bg-slate-50/80 hover:bg-orange-55/60 text-slate-700 hover:text-orange-900 border-slate-200/70 hover:border-orange-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileSpreadsheet className={`w-4 h-4 transition ${adminTab === 'form010' ? 'text-white' : 'text-orange-550'}`} />
-                    <span>ፎርም 010 (Form 010)</span>
-                  </button>
+                   {/* Elegant Dropdown for Forms 010, 011, 012 */}
+                   <div 
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center relative min-h-[92px] ${
+                       ['form010', 'form011', 'form012'].includes(adminTab)
+                         ? 'bg-teal-600 text-white border-teal-600 shadow-lg shadow-teal-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <FileSpreadsheet className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${['form010', 'form011', 'form012'].includes(adminTab) ? 'text-teal-200 scale-110' : 'text-teal-600'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px] mb-1.5">
+                       {adminTab === 'form010' ? 'ቅፅ 010' : adminTab === 'form011' ? 'ቅፅ 011' : adminTab === 'form012' ? 'ቅፅ 012' : 'ቅፆች (Forms)'}
+                     </span>
+                     <select
+                       value={['form010', 'form011', 'form012'].includes(adminTab) ? adminTab : ''}
+                       onChange={(e) => {
+                         if (e.target.value) {
+                           setAdminTab(e.target.value as any);
+                         }
+                       }}
+                       className={`text-[11px] font-black rounded-xl py-1 px-2.5 focus:outline-none cursor-pointer w-full text-center max-w-[140px] border appearance-none transition-all ${
+                         ['form010', 'form011', 'form012'].includes(adminTab)
+                           ? 'bg-teal-800 text-white border-teal-500 hover:bg-teal-900'
+                           : 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'
+                       }`}
+                       style={{ textAlignLast: 'center' }}
+                     >
+                       <option value="" disabled className="text-slate-800 bg-white">ቅፅ ይምረጡ...</option>
+                       <option value="form010" className="text-slate-800 bg-white font-bold">ቅፅ 010 (ስርጭት)</option>
+                       <option value="form011" className="text-slate-800 bg-white font-bold">ቅፅ 011 (አገልግሎት)</option>
+                       <option value="form012" className="text-slate-800 bg-white font-bold">ቅፅ 012 (ተመላሽ)</option>
+                     </select>
+                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('form011')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'form011' 
-                        ? 'bg-gradient-to-r from-rose-500 via-rose-500 to-pink-500 text-white hover:brightness-105 border-transparent shadow-lg shadow-rose-100/40' 
-                        : 'bg-slate-50/80 hover:bg-rose-55/60 text-slate-700 hover:text-rose-900 border-slate-200/70 hover:border-rose-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileSpreadsheet className={`w-4 h-4 transition ${adminTab === 'form011' ? 'text-white' : 'text-rose-600'}`} />
-                    <span>ፎርም 011 (Form 011)</span>
-                  </button>
-                </div>
+                   <button
+                     type="button"
+                     onClick={() => setAdminTab('security')}
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                       adminTab === 'security' 
+                         ? 'bg-slate-800 text-white border-slate-800 shadow-lg shadow-slate-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <ShieldCheck className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'security' ? 'text-emerald-400 scale-110' : 'text-slate-600'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                       ደህንነት
+                       <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">Security</span>
+                     </span>
+                   </button>
 
-                {/* Row 2: Secondary Administration & Settings */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 w-full">
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('form012')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'form012' 
-                        ? 'bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-605 text-white hover:brightness-105 border-transparent shadow-lg shadow-fuchsia-100/40' 
-                        : 'bg-slate-50/80 hover:bg-fuchsia-55/60 text-slate-700 hover:text-fuchsia-900 border-slate-200/70 hover:border-fuchsia-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <FileSpreadsheet className={`w-4 h-4 transition ${adminTab === 'form012' ? 'text-white' : 'text-fuchsia-600'}`} />
-                    <span>ፎርም 012 (Form 012)</span>
-                  </button>
+                   <button
+                     type="button"
+                     onClick={() => setAdminTab('prerequisites')}
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                       adminTab === 'prerequisites' 
+                         ? 'bg-teal-600 text-white border-teal-600 shadow-lg shadow-teal-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-teal-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <BookOpen className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'prerequisites' ? 'text-teal-200 scale-110' : 'text-teal-600'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                       ቅድመ ሁኔታዎች
+                       <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">Requirements</span>
+                     </span>
+                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('security')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'security' 
-                        ? 'bg-gradient-to-r from-slate-700 via-slate-800 to-slate-900 text-white hover:brightness-105 border-transparent shadow-lg shadow-slate-300/40' 
-                        : 'bg-slate-50/80 hover:bg-slate-150 text-slate-700 hover:text-slate-900 border-slate-200/70 hover:border-slate-300 hover:shadow-sm'
-                    }`}
-                  >
-                    <Fingerprint className={`w-4 h-4 transition ${adminTab === 'security' ? 'text-white' : 'text-slate-600'}`} />
-                    <span>ደህንነት (Security)</span>
-                  </button>
+                   <button
+                     type="button"
+                     onClick={() => setAdminTab('audit')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                        adminTab === 'audit' 
+                          ? 'bg-[#b91c1c] text-white border-[#b91c1c] shadow-lg shadow-rose-100 scale-[1.03]' 
+                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Layers className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'audit' ? 'text-rose-200 scale-110' : 'text-[#b91c1c]'}`} />
+                      <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                        የኦዲት መከታተያ
+                        <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">Audit Trail Log</span>
+                      </span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('prerequisites')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'prerequisites' 
-                        ? 'bg-gradient-to-r from-teal-650 via-[#0a7e71] to-emerald-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-teal-100/40' 
-                        : 'bg-slate-50/80 hover:bg-teal-55/60 text-slate-700 hover:text-teal-900 border-slate-200/70 hover:border-teal-200 hover:shadow-sm'
-                    }`}
-                  >
-                    <BookOpen className={`w-4 h-4 transition ${adminTab === 'prerequisites' ? 'text-white' : 'text-teal-600'}`} />
-                    <span>ቅድመ ሁኔታዎች (Requirements)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAdminTab('smsGateway')}
-                    className={`flex items-center justify-center space-x-2 py-3 px-3.5 rounded-2xl text-[11px] font-black leading-none tracking-wide transition-all duration-200 cursor-pointer transform hover:scale-[1.01] active:scale-[0.99] border select-none ${
-                      adminTab === 'smsGateway' 
-                        ? 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-600 text-white hover:brightness-105 border-transparent shadow-lg shadow-sky-100/40' 
-                        : 'bg-slate-50/80 hover:bg-sky-55/60 text-slate-700 hover:text-sky-900 border-slate-200/70 hover:border-sky-305 hover:shadow-sm'
-                    }`}
-                  >
-                    <Smartphone className={`w-4 h-4 transition ${adminTab === 'smsGateway' ? 'text-white' : 'text-sky-600'}`} />
-                    <span>ኤስኤምኤስ (SMS Gateway)</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setAdminTab('smsGateway')}
+                     className={`flex flex-col items-center justify-center p-4 rounded-2xl text-xs sm:text-sm font-black tracking-wide transition-all duration-300 border text-center active:scale-[0.97] cursor-pointer min-h-[92px] ${
+                       adminTab === 'smsGateway' 
+                         ? 'bg-sky-500 text-white border-sky-500 shadow-lg shadow-sky-100 scale-[1.03]' 
+                         : 'bg-white hover:bg-sky-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                     }`}
+                   >
+                     <Smartphone className={`w-5.5 h-5.5 mb-1.5 shrink-0 transition-transform duration-300 ${adminTab === 'smsGateway' ? 'text-sky-100 scale-110' : 'text-sky-500'}`} />
+                     <span className="leading-tight block font-extrabold text-[12.5px] sm:text-[14px]">
+                       ኤስኤምኤስ
+                       <span className="text-[9.5px] opacity-85 font-black block font-sans mt-0.5">SMS Gateway</span>
+                     </span>
+                   </button>
               </div>
             </div>
 
             {/* active tab panel wrapper */}
-            {adminTab === 'residentDocs' && (
+            {false && adminTab === 'residentDocs' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* Left Side: Upload & Resident Registry Form */}
@@ -3303,165 +4764,13 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Scanned upload box */}
+                      {/* Display list of added household members */}
                       <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black text-slate-600">የተቃኙ ፋይሎች ጭን (Scan Upload)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div 
-                            onClick={() => document.getElementById('residentScannedFileInput')?.click()}
-                            className={`border-2 border-dashed rounded-2xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-1 relative min-h-[95px] ${resDocUploadedFiles.length > 0 ? 'border-teal-500 bg-teal-50/10' : 'border-slate-200 hover:border-teal-500 hover:bg-[#0f405c]/5'}`}
-                          >
-                            <input 
-                              type="file" 
-                              id="residentScannedFileInput" 
-                              multiple
-                              accept="application/pdf,image/*"
-                              onChange={handleDocFileChange}
-                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            />
-                            <FileSpreadsheet className="w-5 h-5 text-teal-600 mx-auto" />
-                            <p className="font-extrabold text-[#0f384c] text-[10px]">ፒዲኤፍ ወይም ምስሎች ይጫኑ</p>
-                            <span className="text-[7.5px] text-slate-400 block leading-tight font-medium">የተበታተኑ ፋይሎች (ገጾች) ለመጨመር</span>
-                          </div>
-
-                          <div 
-                            onClick={() => document.getElementById('residentFolderInput')?.click()}
-                            className="border-2 border-dashed border-amber-200 rounded-2xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-1 bg-amber-500/5 hover:border-amber-400 hover:bg-amber-500/10 min-h-[95px]"
-                          >
-                            <input 
-                              type="file" 
-                              id="residentFolderInput" 
-                              multiple
-                              {...({ webkitdirectory: "", directory: "" } as any)}
-                              onChange={handleFolderUpload}
-                              className="hidden" 
-                            />
-                            <FolderClosed className="w-5 h-5 text-amber-600 mx-auto animate-pulse" />
-                            <p className="font-extrabold text-[#0f384c] text-[10px]">📁 ሙሉ ፎልደር በአንድ ላይ ጫን</p>
-                            <span className="text-[7px] text-amber-800/85 block leading-tight font-sans font-bold">
-                              የቤት ቁጥር እና ስም ከፎልደሩ ስም በራስ-ሰር ፈልጎ ይገጥማል!
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Draft Scanned Files Preview List */}
-                      {resDocUploadedFiles.length > 0 && (
-                        <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200/60 space-y-1.5 font-sans">
-                          <div className="flex justify-between items-center text-[9.5px] font-bold text-[#0f405c]">
-                            <span className="flex items-center gap-1">
-                              <FileText className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
-                              <span>የተጫኑ የተቃኙ ገጾች (${resDocUploadedFiles.length})</span>
-                            </span>
-                            <button 
-                              type="button" 
-                              onClick={() => setResDocUploadedFiles([])}
-                              className="text-[8.5px] text-rose-600 hover:underline cursor-pointer"
-                            >
-                              ሁሉንም ሰርዝ
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-1 max-h-[120px] overflow-y-auto pr-0.5 scrollbar-thin font-sans">
-                            {resDocUploadedFiles.map((file, idx) => (
-                              <div key={file.id || idx} className="flex justify-between items-center p-1.5 bg-white border border-slate-150 rounded-xl text-[9.5px]">
-                                <div className="flex items-center space-x-1.5 min-w-0 flex-1">
-                                  <span className="text-[8px] font-black text-slate-400 font-sans shrink-0">ገጽ {idx + 1}</span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-sans font-bold text-[#0f384c] truncate" title={file.fileName}>{file.fileName}</p>
-                                    <p className="text-[7.5px] font-mono text-slate-450">መጠን፦ {file.fileSize}</p>
-                                  </div>
-                                </div>
-                                <button 
-                                  type="button" 
-                                  onClick={() => setResDocUploadedFiles(prev => prev.filter(f => f.id !== file.id))}
-                                  className="text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition shrink-0 cursor-pointer"
-                                  title="ገጽ አስወግድ"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Household Members Registration Zone */}
-                      <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200/60 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9.5px] uppercase font-bold text-[#0f405c] flex items-center gap-1">
-                            <Fingerprint className="w-3.5 h-3.5 text-teal-600" />
-                            <span>አብረው የሚኖሩ የቤት አባላት / ነዋሪዎች (${resDocMembers.length})</span>
-                          </span>
-                          {resDocMembers.length > 0 && (
-                            <button 
-                              type="button" 
-                              onClick={() => setResDocMembers([])}
-                              className="text-[8.5px] font-bold text-rose-600 hover:underline cursor-pointer"
-                            >
-                              አጽዳ
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-1.5 bg-white p-2 rounded-xl border border-slate-150">
-                          <input 
-                            type="text" 
-                            value={newMemberName}
-                            onChange={(e) => setNewMemberName(e.target.value)}
-                            placeholder="የነዋሪው ሙሉ ስም (Family/Tenant Full Name)"
-                            className="w-full p-2 border border-slate-200 rounded-lg text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-teal-600"
-                          />
-                          
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <select 
-                              value={newMemberRole}
-                              onChange={(e) => setNewMemberRole(e.target.value as any)}
-                              className="p-1.5 border border-slate-200 rounded-lg text-[9.5px] font-bold bg-slate-50 focus:outline-none font-sans"
-                            >
-                              <option value="ቤተሰብ">ቤተሰብ (Family Member)</option>
-                              <option value="የቤት ባለቤት">የቤት ባለቤት (Homeowner)</option>
-                              <option value="ተከራይ">ተከራይ (Tenant)</option>
-                              <option value="ሌላ">ሌላ (Other / Visitor)</option>
-                            </select>
-                            
-                            <input 
-                              type="text" 
-                              value={newMemberId}
-                              onChange={(e) => setNewMemberId(e.target.value)}
-                              placeholder="መታወቂያ ቁጥር (Optional ID)"
-                              className="p-1.5 border border-slate-200 rounded-lg text-[9.5px] font-mono focus:outline-none"
-                            />
-                          </div>
-
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              if (!newMemberName.trim()) {
-                                alert("እባክዎ የቤተሰቡን/ነዋሪውን ሙሉ ስም ያስገቡ!");
-                                return;
-                              }
-                              const newMB = {
-                                id: 'memb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                                fullName: newMemberName.trim(),
-                                role: newMemberRole,
-                                idNumber: newMemberId.trim() || undefined
-                              };
-                              setResDocMembers(prev => [...prev, newMB]);
-                              setNewMemberName('');
-                              setNewMemberId('');
-                            }}
-                            className="w-full bg-[#0f405c] hover:bg-[#072436] text-white py-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-teal-300" />
-                            <span>+ ነዋሪ ዝርዝር ውስጥ አስገባ</span>
-                          </button>
-                        </div>
-
                         {resDocMembers.length > 0 ? (
-                          <div className="max-h-[105px] overflow-y-auto space-y-1 pr-0.5 scrollbar-thin">
+                          <div className="space-y-1.5 max-h-[140px] overflow-y-auto border p-2 rounded-xl bg-slate-50/50">
+                            <p className="text-[10px] font-black text-slate-600">አባሎች ({resDocMembers.length})</p>
                             {resDocMembers.map((m, idx) => {
-                              let badgeStyle = "bg-sky-50 text-sky-850 border-sky-100";
+                              let badgeStyle = "bg-slate-50 text-slate-900 border-slate-150";
                               if (m.role === 'የቤት ባለቤት') badgeStyle = "bg-blue-50 text-blue-900 border-blue-150";
                               else if (m.role === 'ተከራይ') badgeStyle = "bg-amber-50 text-amber-900 border-amber-150";
                               else if (m.role === 'ሌላ') badgeStyle = "bg-purple-50 text-purple-900 border-purple-150";
@@ -3718,11 +5027,13 @@ export default function App() {
 
                                   {/* Scanned Filename detail */}
                                   <div className="flex flex-wrap gap-1.5 mt-1 font-sans">
-                                    <div className="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-150 flex items-center space-x-1.5 w-fit max-w-full text-[9px] text-slate-600">
-                                      <FileSpreadsheet className="w-3.5 h-3.5 text-slate-450 shrink-0" />
-                                      <span className="font-sans truncate font-bold max-w-[200px]">{docItem.fileName || (docItem.files && docItem.files[0]?.fileName) || "የተቃኘ ሰነድ.pdf"}</span>
-                                      <span className="font-mono text-[8px] px-1 bg-slate-200 text-slate-600 rounded shrink-0">{docItem.fileSize || (docItem.files && docItem.files[0]?.fileSize) || "ወ/0"}</span>
-                                    </div>
+                                    {docItem.files && docItem.files.length > 0 && (
+                                      <div className="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-150 flex items-center space-x-1.5 w-fit max-w-full text-[9px] text-slate-600">
+                                        <FileSpreadsheet className="w-3.5 h-3.5 text-slate-450 shrink-0" />
+                                        <span className="font-sans truncate font-bold max-w-[200px]">{docItem.fileName || (docItem.files && docItem.files[0]?.fileName) || "የተቃኘ ሰነድ.pdf"}</span>
+                                        <span className="font-mono text-[8px] px-1 bg-slate-200 text-slate-600 rounded shrink-0">{docItem.fileSize || (docItem.files && docItem.files[0]?.fileSize) || "ወ/0"}</span>
+                                      </div>
+                                    )}
                                     {docItem.files && docItem.files.length > 1 && (
                                       <span className="bg-teal-50 border border-teal-100 text-[#0f405c] px-2 py-1 rounded-lg text-[9px] font-black font-sans">
                                         📄 +{docItem.files.length - 1} ተጨማሪ የተቃኙ ገጾች
@@ -3753,14 +5064,16 @@ export default function App() {
                                     <span>ቢሮ ውስጥ ክፈት</span>
                                   </button>
 
-                                  <a
-                                    href={docItem.contentUrl}
-                                    download={docItem.fileName}
-                                    className="p-2 text-slate-600 hover:text-slate-900 border border-slate-200 bg-slate-50 rounded-xl flex items-center transition active:scale-95"
-                                    title="ሰነዱን ወደ ኮምፒውተር ይጫኑ (Download Scanned File)"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                  </a>
+                                  {docItem.files && docItem.files.length > 0 && (
+                                    <a
+                                      href={docItem.contentUrl}
+                                      download={docItem.fileName}
+                                      className="p-2 text-slate-600 hover:text-slate-900 border border-slate-200 bg-slate-50 rounded-xl flex items-center transition active:scale-95"
+                                      title="ሰነዱን ወደ ኮምፒውተር ይጫኑ (Download Scanned File)"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
 
                                   <button
                                     onClick={() => handleDeleteResidentDoc(docItem.id, docItem.residentName)}
@@ -3784,118 +5097,316 @@ export default function App() {
             {/* A. ID HANDOVERS PANEL */}
             {adminTab === 'handovers' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 no-print">
-                {/* Left Form: Add new ready printed ID */}
-                <div className="lg:col-span-4 bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
-                  <h3 className="text-xs font-extrabold text-teal-950 border-b pb-2 flex items-center">
-                    <Plus className="w-4 h-4 mr-1 text-teal-600" /> ታትሞ የደረሰ መታወቂያ መመዝገቢያ
-                  </h3>
-                  
-                  <form onSubmit={handleAddNewID} className="space-y-3 text-xs">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 mb-1">የተገልጋይ ሙሉ ስም</label>
-                      <input 
-                        type="text" 
-                        value={newIdName}
-                        onChange={(e) => setNewIdName(e.target.value)}
-                        placeholder="ለምሳሌ፡ ዮናስ ታደሰ ይመኑ"
-                        className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                        ስልክ ቁጥር <span className="text-red-500 font-extrabold">* (የግዴታ - ለ SMS መላኪያ)</span>
-                      </label>
-                      <input 
-                        type="tel" 
-                        value={newIdPhone}
-                        onChange={(e) => setNewIdPhone(e.target.value)}
-                        placeholder="09xxxxxxxx ወይም 07xxxxxxxx"
-                        className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none font-mono"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 mb-1">የመታወቂያ ቁጥር (10-12 ዲጂት)</label>
-                      <input 
-                        type="text" 
-                        value={newIdNum}
-                        onChange={(e) => setNewIdNum(e.target.value)}
-                        placeholder="AA0000454117"
-                        className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none uppercase"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 mb-1">የቤት ቁጥር</label>
-                      <input 
-                        type="text" 
-                        value={newIdHouse}
-                        onChange={(e) => setNewIdHouse(e.target.value)}
-                        placeholder="415/ሀ"
-                        className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none"
-                        required
-                      />
-                    </div>
-                     <div className="bg-amber-50 text-amber-900 p-3 rounded-xl border border-amber-100/70 text-[9px] font-bold leading-relaxed space-y-1">
-                       <span className="text-[10px]">💡 <strong>ማሳሰቢያ (Notice):</strong></span>
-                       <p className="font-extrabold text-[#78350f]">መታወቂያው እዚህ ሲመዘገብ ለተገልጋዩ "የቦሌ ወረዳ 05 የነዋሪነት መታወቂያዎ ስለደረሰ በአስቸኳይ መጥተው ይውሰዱ" የሚል አፋጣኝ የአጭር መልዕክት (SMS) ጥሪ በስልካቸው ላይ ይደርሳቸዋል። ይህም በመስሪያ ቤቱ ውስጥ የሚፈጠረውን የመታወቂያ ክምችት ይቀንሳል።</p>
-                     </div>
-                     
-                     <div className="space-y-2 pt-1 font-sans">
-                       <button 
-                         type="button" 
-                         onClick={() => performIDRegistration(true)}
-                         className="w-full bg-teal-800 hover:bg-teal-900 border border-teal-700 text-white font-black py-3 px-4 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center space-x-2 cursor-pointer"
-                       >
-                         <Send className="w-4 h-4 text-teal-300 animate-pulse" />
-                         <span>መዝግብና ወዲያውኑ SMS ላክ (Register & Send SMS)</span>
-                       </button>
+                {/* Left Side Container */}
+                <div className="lg:col-span-4 space-y-4">
+                  {/* Left Form: Add new ready printed ID */}
+                  <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+                    <h3 className="text-xs font-extrabold text-teal-950 border-b pb-2 flex items-center">
+                      <Plus className="w-4 h-4 mr-1 text-teal-600" /> ታትሞ የደረሰ መታወቂያ መመዝገቢያ
+                    </h3>
+                    
+                    <form onSubmit={handleAddNewID} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">የተገልጋይ ሙሉ ስም</label>
+                        <input 
+                          type="text" 
+                          value={newIdName}
+                          onChange={(e) => setNewIdName(e.target.value)}
+                          placeholder="ለምሳሌ፡ ዮናስ ታደሰ ይመኑ"
+                          className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                          ስልክ ቁጥር <span className="text-red-500 font-extrabold">* (የግዴታ - ለ SMS መላኪያ)</span>
+                        </label>
+                        <input 
+                          type="tel" 
+                          value={newIdPhone}
+                          onChange={(e) => setNewIdPhone(e.target.value)}
+                          placeholder="09xxxxxxxx ወይም 07xxxxxxxx"
+                          className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">የመታወቂያ ቁጥር (10-12 ዲጂት)</label>
+                        <input 
+                          type="text" 
+                          value={newIdNum}
+                          onChange={(e) => setNewIdNum(e.target.value)}
+                          placeholder="AA0000454117"
+                          className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none uppercase"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">የቤት ቁጥር</label>
+                        <input 
+                          type="text" 
+                          value={newIdHouse}
+                          onChange={(e) => setNewIdHouse(e.target.value)}
+                          placeholder="415/ሀ"
+                          className="w-full p-2.5 border rounded-lg focus:ring-1 focus:ring-teal-600 focus:outline-none"
+                          required
+                        />
+                      </div>
+                       <div className="bg-amber-50 text-amber-900 p-3 rounded-xl border border-amber-100/70 text-[9px] font-bold leading-relaxed space-y-1">
+                         <span className="text-[10px]">💡 <strong>ማሳሰቢያ (Notice):</strong></span>
+                         <p className="font-extrabold text-[#78350f]">መታወቂያው እዚህ ሲመዘገብ ለተገልጋዩ "[ስም] ወረዳ 05 መታወቂያዎ ደርሷል መጥተው ይውሰዱ" የሚል አጭር መልዕክት (SMS) ጥሪ በስልካቸው ላይ ይደርሳቸዋል። ይህም በመስሪያ ቤቱ ውስጥ የሚፈጠረውን የመታወቂያ ክምችት ይቀንሳል።</p>
+                       </div>
+                       
+                       <div className="space-y-2 pt-1 font-sans">
+                         <button 
+                           type="button" 
+                           onClick={() => performIDRegistration(true)}
+                           className="w-full bg-teal-800 hover:bg-teal-900 border border-teal-700 text-white font-black py-3 px-4 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center space-x-2 cursor-pointer"
+                         >
+                           <Send className="w-4 h-4 text-teal-300 animate-pulse" />
+                           <span>መዝግብና ወዲያውኑ SMS ላክ (Register & Send SMS)</span>
+                         </button>
+  
+                         <button 
+                           type="button" 
+                           onClick={() => performIDRegistration(false)}
+                           className="w-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-extrabold py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-[0.98] flex items-center justify-center space-x-2 cursor-pointer"
+                         >
+                           <FileText className="w-3.5 h-3.5 text-slate-500" />
+                           <span>መረጃውን ብቻ መዝግብ (SMS ሳትልክ አስቀምጥ)</span>
+                         </button>
+                         <p className="text-[9px] text-slate-400 font-semibold text-center leading-relaxed">ኤስኤምኤስ በኋላ ለመላክ "መረጃውን ብቻ መዝግብ" የሚለውን ይጫኑ።</p>
+                       </div>
+                    </form>
+                  </div>
 
-                       <button 
-                         type="button" 
-                         onClick={() => performIDRegistration(false)}
-                         className="w-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-extrabold py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-[0.98] flex items-center justify-center space-x-2 cursor-pointer"
-                       >
-                         <FileText className="w-3.5 h-3.5 text-slate-500" />
-                         <span>መረጃውን ብቻ መዝግብ (SMS ሳትልክ አስቀምጥ)</span>
-                       </button>
-                       <p className="text-[9px] text-slate-400 font-semibold text-center leading-relaxed">ኤስኤምኤስ በኋላ ለመላክ "መረጃውን ብቻ መዝግብ" የሚለውን ይጫኑ።</p>
-                     </div>
-                  </form>
+                  {/* 📋 የርክክብ የፊርማ ሪፖርት ማዕከል (Signature Report Center) */}
+                  <div className="bg-gradient-to-b from-white to-slate-50 rounded-3xl p-6 shadow-md border-2 border-teal-150/80 space-y-5">
+                    
+                    {/* Header Banner - Highly Professional & Stylish */}
+                    <div className="bg-gradient-to-r from-teal-50 to-cyan-50/70 p-4 rounded-2xl border border-teal-100/50 space-y-1">
+                      <h3 className="text-[15px] sm:text-[16px] font-black text-teal-950 flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-teal-600 animate-pulse" /> የርክክብ ሪፖርት ማዕከል
+                      </h3>
+                      <p className="text-[11px] text-teal-700 font-extrabold uppercase tracking-wider">የቦሌ ወረዳ 05 መታወቂያ ርክክብ ማረጋገጫ</p>
+                    </div>
+
+                    {/* Report Period Selector Cards - Horizontal, compact, distinctive colors */}
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
+                      {/* 1. Daily Report Card */}
+                      <div
+                        onClick={() => setReportPeriod('day')}
+                        className={`p-3 rounded-xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between gap-1.5 text-center relative overflow-hidden group ${
+                          reportPeriod === 'day' 
+                            ? 'bg-emerald-50 border-emerald-600 text-emerald-950 shadow-sm shadow-emerald-100/50' 
+                            : 'bg-white border-slate-200 hover:border-emerald-300 text-slate-700 hover:bg-emerald-50/20 shadow-3xs'
+                        }`}
+                      >
+                        <span className="text-base sm:text-lg">📅</span>
+                        <h4 className="text-[11px] sm:text-xs font-black transition-colors leading-tight">የቀን (Daily)</h4>
+                        <span className={`text-[9.5px] sm:text-[10px] px-1.5 py-0.5 font-black rounded-lg shrink-0 ${
+                          reportPeriod === 'day' 
+                            ? 'bg-emerald-600 text-white' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {countDailySig} ርክክብ
+                        </span>
+                      </div>
+
+                      {/* 2. Weekly Report Card */}
+                      <div
+                        onClick={() => setReportPeriod('week')}
+                        className={`p-3 rounded-xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between gap-1.5 text-center relative overflow-hidden group ${
+                          reportPeriod === 'week' 
+                            ? 'bg-sky-50 border-sky-600 text-sky-950 shadow-sm shadow-sky-100/50' 
+                            : 'bg-white border-slate-200 hover:border-sky-300 text-slate-700 hover:bg-sky-50/20 shadow-3xs'
+                        }`}
+                      >
+                        <span className="text-base sm:text-lg">🗓️</span>
+                        <h4 className="text-[11px] sm:text-xs font-black transition-colors leading-tight">የሳምንት (Weekly)</h4>
+                        <span className={`text-[9.5px] sm:text-[10px] px-1.5 py-0.5 font-black rounded-lg shrink-0 ${
+                          reportPeriod === 'week' 
+                            ? 'bg-sky-600 text-white' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {countWeeklySig} ርክክብ
+                        </span>
+                      </div>
+
+                      {/* 3. Monthly Report Card */}
+                      <div
+                        onClick={() => setReportPeriod('month')}
+                        className={`p-3 rounded-xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between gap-1.5 text-center relative overflow-hidden group ${
+                          reportPeriod === 'month' 
+                            ? 'bg-purple-50 border-purple-600 text-purple-950 shadow-sm shadow-purple-100/50' 
+                            : 'bg-white border-slate-200 hover:border-purple-300 text-slate-700 hover:bg-purple-50/20 shadow-3xs'
+                        }`}
+                      >
+                        <span className="text-base sm:text-lg">📊</span>
+                        <h4 className="text-[11px] sm:text-xs font-black transition-colors leading-tight">የወር (Monthly)</h4>
+                        <span className={`text-[9.5px] sm:text-[10px] px-1.5 py-0.5 font-black rounded-lg shrink-0 ${
+                          reportPeriod === 'month' 
+                            ? 'bg-purple-600 text-white' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {countMonthlySig} ርክክብ
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Statistics Display Badges */}
+                    <div className="bg-white border-2 border-teal-50/80 rounded-2xl p-3.5 flex justify-between items-center shadow-xs">
+                      <span className="text-[11.5px] font-black text-slate-750">በአሁኑ ሰነድ ውስጥ የሚገኙ፦</span>
+                      <span className="font-mono bg-emerald-50 text-emerald-950 text-xs font-black px-3.5 py-1 border border-emerald-200 rounded-full shadow-2xs">
+                        {deliveredInPeriod.length} ተረካቢዎች
+                      </span>
+                    </div>
+
+                    {deliveredInPeriod.length > 0 ? (
+                      <div className="space-y-4">
+                        {/* List container with custom slick styling and subtle borders */}
+                        <div className="max-h-[200px] overflow-y-auto pr-1 space-y-2 border border-slate-200/60 rounded-xl p-2 bg-white/50 shadow-inner">
+                          {deliveredInPeriod.map((item, idx) => (
+                            <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 hover:bg-teal-50/20 border border-slate-200/80 text-[11px] transition-colors duration-200 shadow-3xs">
+                              <div>
+                                <p className="font-black text-slate-800">{idx + 1}. {item.name}</p>
+                                <p className="text-[9px] font-mono text-slate-500 mt-0.5">{item.idNumber} | {item.houseNumber ? `ቤት ቁጥር ${item.houseNumber}` : 'ቤት አልተገለጸም'}</p>
+                              </div>
+                              {item.pickupSignature ? (
+                                <img src={item.pickupSignature} className="h-8 w-16 object-contain bg-white border border-slate-200 rounded-lg shadow-2xs p-0.5 mix-blend-multiply transition-transform hover:scale-110" alt="signature" />
+                              ) : (
+                                <span className="text-[9px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1 rounded-lg">ያልተፈረመ</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Print / Download Button - Prominent & Beautiful with Hover Animations */}
+                        <button
+                          type="button"
+                          onClick={downloadHandoverPDF}
+                          className="w-full bg-gradient-to-r from-cyan-600 to-teal-700 hover:from-cyan-700 hover:to-teal-800 text-white font-black py-3 px-4 rounded-xl shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center space-x-2 cursor-pointer text-[11.5px]"
+                        >
+                          <Download className="w-4 h-4 animate-bounce" />
+                          <span>የሪፖርት ማጠቃለያ በ PDF አውርድ (A4 Print)</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-10 px-4 text-center border-2 border-dashed border-slate-200 bg-slate-50/50 rounded-2xl">
+                        <p className="text-xs text-slate-500 font-extrabold leading-relaxed">ለተመረጠው የጊዜ ገደብ የተረከበ ነዋሪ የለም።</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right: Existing Inventory list & trigger delivery */}
-                <div className="lg:col-span-8 bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2">
-                    <div className="space-y-0.5">
-                      <h3 className="text-xs font-extrabold text-teal-950">የመታወቂያዎች ርክክብ መቆጣጠሪያ ሰንጠረዥ</h3>
-                      <p className="text-[9px] text-slate-400 font-semibold">የተረከቡና በእጅ የቀሩ መታወቂያዎች መከታተያ</p>
+                <div className="lg:col-span-8 bg-white rounded-3xl p-6 shadow-md border-2 border-teal-100/90 space-y-6">
+                  {/* Premium Heading Section with Left Accent Bar */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-teal-50 to-cyan-50/50 p-5 rounded-2xl border border-teal-100/50">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="h-12 w-2 bg-teal-600 rounded-full"></div>
+                      <div>
+                        <h3 className="text-[17px] md:text-[19px] font-black text-teal-950 tracking-tight leading-snug">
+                          የተረከቡና በእጅ የቀሩ መታወቂያዎች መከታተያ
+                        </h3>
+                        <p className="text-[11.5px] text-teal-700 font-bold mt-0.5">
+                          የመታወቂያዎች ርክክብ መቆጣጠሪያ ሰንጠረዥ • ID Handover Management Hub
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    
+                    <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => setSmsPendingFilter(!smsPendingFilter)}
-                        className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer focus:outline-none border ${smsPendingFilter ? 'bg-amber-600 border-amber-500 text-white shadow-amber-100' : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'}`}
+                        type="button"
+                        onClick={exportCurrentTableToExcel} 
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-[11px] font-black rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer focus:outline-none hover:scale-[1.02] active:scale-[0.98]"
+                        title="የሚታዩትን መረጃዎች በ Excel ያውርዱ"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" /> <span>📥 Excel አውርድ</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search and Filters Segment - Highly visible, spacious, with beautiful borders and colors */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/60 space-y-4">
+                    <div className="flex flex-col lg:flex-row gap-3">
+                      
+                      {/* Search Input Box - Prominent & Beautiful */}
+                      <div className="flex-1 relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <Search className="h-5 w-5 text-teal-600" />
+                        </div>
+                        <input 
+                          type="text"
+                          value={adminSearch}
+                          onChange={(e) => setAdminSearch(e.target.value)}
+                          placeholder="የነዋሪ ስም ወይም መለያ ቁጥር እዚህ ይፈልጉ..."
+                          className="pl-10.5 pr-4 py-3.5 border-2 border-slate-200 focus:border-teal-600 rounded-xl text-[13.5px] w-full focus:outline-none focus:ring-4 focus:ring-teal-100 bg-white font-extrabold text-slate-800 placeholder-slate-400 shadow-xs transition-all"
+                        />
+                      </div>
+
+                      {/* Date Filter Input Box */}
+                      <div className="relative w-full lg:w-64">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <Calendar className="h-5 w-5 text-cyan-600" />
+                        </div>
+                        <input 
+                          type="text"
+                          value={adminDateSearch}
+                          onChange={(e) => setAdminDateSearch(e.target.value)}
+                          placeholder="በምዝገባ ቀን (ቀን ወር ዓ.ም)..."
+                          className="pl-10.5 pr-4 py-3.5 border-2 border-slate-200 focus:border-cyan-600 rounded-xl text-[12.5px] w-full focus:outline-none focus:ring-4 focus:ring-cyan-100 bg-white font-bold text-slate-800 placeholder-slate-400 shadow-xs transition-all"
+                          title="ለምሳሌ፡ 26 ሰኔ 2018"
+                        />
+                      </div>
+
+                    </div>
+
+                    {/* Filter Status Pills - Vibrant, rounded, and attractive */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60">
+                      <span className="text-[10px] font-black text-slate-500 uppercase mr-1">ፈጣን ማጣሪያዎች:</span>
+                      
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setSmsPendingFilter(!smsPendingFilter);
+                          setDeliveredFilter(false);
+                        }}
+                        className={`px-3.5 py-2 text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1.5 cursor-pointer focus:outline-none border ${smsPendingFilter ? 'bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100 scale-[1.02]' : 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-200 hover:border-amber-300'}`}
                         title="መልዕክት ያልተላከላቸውን ብቻ ለማሳየት ይጫኑ"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0" />
                         <span>{smsPendingFilter ? 'ያልተላከላቸው ብቻ (የበራ)' : 'ያልተላከላቸው ብቻ'}</span>
                       </button>
 
                       <button 
-                        onClick={exportDeliveredIDsToExcel} 
-                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black rounded-lg transition shadow-sm flex items-center gap-1 cursor-pointer focus:outline-none border border-emerald-600"
-                        title="የወሰዱ መታወቂያዎችን ሪፖርት በ Excel ያውርዱ"
+                        type="button"
+                        onClick={() => {
+                          setDeliveredFilter(!deliveredFilter);
+                          setSmsPendingFilter(false);
+                        }}
+                        className={`px-3.5 py-2 text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1.5 cursor-pointer focus:outline-none border ${deliveredFilter ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100 scale-[1.02]' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-200 hover:border-emerald-300'}`}
+                        title="የወሰዱ መታወቂያዎችን ብቻ ለማሳየት ይጫኑ"
                       >
-                        <FileSpreadsheet className="w-3.5 h-3.5" /> <span>🟢 የወሰዱ ብቻ (Excel)</span>
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <span>{deliveredFilter ? 'የወሰዱ ብቻ (የበራ)' : 'የወሰዱ ብቻ'}</span>
                       </button>
-                      <input 
-                        type="text"
-                        value={adminSearch}
-                        onChange={(e) => setAdminSearch(e.target.value)}
-                        placeholder="በስም ወይም መለያ ፈልግ..."
-                        className="p-1.5 border border-slate-200 rounded-lg text-[10px] w-full sm:w-40 focus:outline-none focus:ring-1 focus:ring-teal-600 bg-slate-50 font-semibold"
-                      />
+
+                      {/* Reset filter button shown if any filter is active */}
+                      {(smsPendingFilter || deliveredFilter || adminSearch || adminDateSearch) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSmsPendingFilter(false);
+                            setDeliveredFilter(false);
+                            setAdminSearch('');
+                            setAdminDateSearch('');
+                          }}
+                          className="px-3 py-1.5 text-[10.5px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-all hover:scale-[1.02]"
+                        >
+                          ሁሉንም አፅዳ (Reset Filters)
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -3907,6 +5418,7 @@ export default function App() {
                           <th className="p-2.5">መታወቂያ ቁጥር</th>
                           <th className="p-2.5">የቤት ቁጥር</th>
                           <th className="p-2.5">ስልክ ቁጥር</th>
+                          <th className="p-2.5">የምዝገባ ቀን</th>
                           <th className="p-2.5">ሁኔታ</th>
                           <th className="p-2.5 text-right">ድርጊት</th>
                         </tr>
@@ -3918,6 +5430,7 @@ export default function App() {
                             <td className="p-2.5 font-mono text-slate-500">{item.idNumber}</td>
                             <td className="p-2.5">{item.houseNumber}</td>
                             <td className="p-2.5 text-slate-500">{item.phone}</td>
+                            <td className="p-2.5 text-slate-500 font-semibold">{item.registrationDate || 'ያልተገለጸ'}</td>
                             <td className="p-2.5">
                               {item.status === 'የወሰደ' ? (
                                 <span className="inline-block px-2 py-0.5 text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl">
@@ -3987,7 +5500,7 @@ export default function App() {
                       onChange={(e) => setSelectedDocType(e.target.value as DocumentType)}
                       className="w-full p-2.5 border-2 border-teal-600 rounded-xl text-xs bg-white font-bold text-teal-900 focus:outline-none"
                     >
-                      <option value={DocumentType.RECOMMENDATION}>1. የመሸኛ አገልግሎት መጠየቂያ ቅጽ (Recommendation)</option>
+                      <option value={DocumentType.RECOMMENDATION}>1. የመሸኛ አገልግሎት መጠየቂያ ቅፅ (Recommendation)</option>
                       <option value={DocumentType.RESIDENCY}>2. የነዋሪነት ማረጋገጫ ደብዳቤ (Residency Letter)</option>
                       <option value={DocumentType.LIFE_STATUS}>3. በሕይወት የመኖር ማረጋገጫ ደብዳቤ (Life Status)</option>
                     </select>
@@ -4399,6 +5912,18 @@ export default function App() {
                     </select>
                   </div>
                   <div className="flex items-center space-x-1">
+                    <span>በመረካከቢያ ዓይነት እይ:</span>
+                    <select 
+                      value={f10FilterHandoverType} 
+                      onChange={(e) => setF10FilterHandoverType(e.target.value as any)} 
+                      className="p-1 border rounded bg-white text-[10px]"
+                    >
+                      <option value="all">ሁሉንም አሳይ</option>
+                      <option value="የክፍለከተማ መረካከቢያ">የክፍለከተማ መረካከቢያ</option>
+                      <option value="የወረዳ መረካከቢያ">የወረዳ መረካከቢያ</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center space-x-1">
                     <span>በመለያ ፈልግ:</span>
                     <input 
                       type="text" 
@@ -4447,13 +5972,13 @@ export default function App() {
                     onClick={() => exportToCSV('f010')}
                     className="ml-auto bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center space-x-1"
                   >
-                    <Download className="w-3.5 h-3.5" /> <span>Excel (ቅጽ 010) አውርድ</span>
+                    <Download className="w-3.5 h-3.5" /> <span>Excel (ቅፅ 010) አውርድ</span>
                   </button>
                 </div>
 
                 {/* Form Inputs (010) - no print */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4 no-print text-xs">
-                  <h3 className="font-extrabold text-teal-950 border-b pb-2">ቅጽ 010 - የዕለት ህትመት ስርጭት መረጃ ማስገቢያ</h3>
+                  <h3 className="font-extrabold text-teal-950 border-b pb-2">ቅፅ 010 - የዕለት ህትመት ስርጭት መረጃ ማስገቢያ</h3>
                   <form onSubmit={handleAddForm010} className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 mb-1">የህትመት አይነት</label>
@@ -4489,6 +6014,17 @@ export default function App() {
                       >
                         <option value="ሲስተም">በሲስተም (System)</option>
                         <option value="ማኑዋል">በማኑዋል (Manual)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">የመረካከቢያ ዓይነት (Handover Type)</label>
+                      <select 
+                        value={f10HandoverType} 
+                        onChange={(e) => setF10HandoverType(e.target.value as any)} 
+                        className="w-full p-2 border rounded-md font-bold text-teal-900"
+                      >
+                        <option value="የክፍለከተማ መረካከቢያ">የክፍለከተማ መረካከቢያ (ከክፍለ ከተማ)</option>
+                        <option value="የወረዳ መረካከቢያ">የወረዳ መረካከቢያ (ከወረዳ)</option>
                       </select>
                     </div>
                     <div>
@@ -4545,8 +6081,8 @@ export default function App() {
                 <div className="bg-white rounded-2xl p-6 md:p-8 border border-neutral-300 shadow-lg text-xs text-black space-y-4 print-area max-w-4xl mx-auto">
                   <div className="text-center border-b pb-4 mb-4">
                     <h4 className="text-[10px] font-bold uppercase tracking-wider">በአዲስ አበባ ከተማ አስተዳደር የሲቪል ምዝገባ እና የነዋሪነት አገልግሎት ኤጀንሲ</h4>
-                    <h2 className="text-base font-extrabold mt-1 text-slate-900">ቅጽ ቁጥር 010</h2>
-                    <h3 className="text-xs font-bold text-slate-700">በወረዳ እና ክ/ከተማ የዕለት ህትመት ስርጭት ቅጽ</h3>
+                    <h2 className="text-base font-extrabold mt-1 text-slate-900">ቅፅ ቁጥር 010</h2>
+                    <h3 className="text-xs font-bold text-slate-700">በወረዳ እና ክ/ከተማ የዕለት ህትመት ስርጭት ቅፅ</h3>
                     <div className="flex justify-between mt-3 text-[10px] font-semibold text-slate-600 px-2 leading-none">
                       <div><strong>ክፍለ ከተማ:</strong> <span className="underline">ቦሌ</span></div>
                       <div><strong>ወረዳ:</strong> <span className="underline">05</span></div>
@@ -4560,10 +6096,12 @@ export default function App() {
                         <tr className="bg-slate-100 font-bold">
                           <th className="border border-black p-1.5" rowSpan={2}>ተ.ቁ</th>
                           <th className="border border-black p-1.5" rowSpan={2}>የህትመት አይነት</th>
+                          <th className="border border-black p-1.5" rowSpan={2}>የመረካከቢያ ዓይነት</th>
                           <th className="border border-black p-1.5" rowSpan={2}>ብዛት в ቁጥር</th>
                           <th className="border border-black p-1.5" colSpan={2}>የህትመት ዘዴ</th>
                           <th className="border border-black p-1.5" colSpan={2}>ሴሪያል ቁጥር</th>
                           <th className="border border-black p-1.5" rowSpan={2}>ርክክብ የተደረገበት ዕለት</th>
+                          <th className="border border-black p-1.5" rowSpan={2}>ተረካቢ ፊርማ</th>
                           <th className="border border-black p-1.5" rowSpan={2}>ማስታወሻ</th>
                           <th className="border border-black p-1.5 no-print" rowSpan={2}>ድርጊት</th>
                         </tr>
@@ -4579,15 +6117,32 @@ export default function App() {
                           <tr key={row.id}>
                             <td className="border border-black p-1.5">{idx + 1}</td>
                             <td className="border border-black p-1.5 text-left font-bold">{row.type}</td>
+                            <td className="border border-black p-1.5 font-bold text-teal-800">{row.handoverType || 'የክፍለከተማ መረካከቢያ'}</td>
                             <td className="border border-black p-1.5 font-bold">{row.qty}</td>
                             <td className="border border-black p-1.5">{row.method === 'ማኑዋል' ? '✓' : ''}</td>
                             <td className="border border-black p-1.5">{row.method === 'ሲስተም' ? '✓' : ''}</td>
                             <td className="border border-black p-1.5 font-mono">{row.from}</td>
                             <td className="border border-black p-1.5 font-mono">{row.to}</td>
                             <td className="border border-black p-1.5 font-bold">{row.date}</td>
+                            <td className="border border-black p-1.5 text-center">
+                              {row.signature ? (
+                                <img src={row.signature} className="h-6 mx-auto bg-white border" alt="Sig" />
+                              ) : (
+                                <span className="text-slate-400 italic text-[8px]">ፊርማ የለም</span>
+                              )}
+                            </td>
                             <td className="border border-black p-1.5 text-left text-[9px]">{row.remark}</td>
                             <td className="border border-black p-1.5 no-print">
-                              <button onClick={() => deleteF10Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
+                              <div className="flex flex-col gap-1 items-center">
+                                <button onClick={() => deleteF10Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
+                                <button 
+                                  type="button" 
+                                  onClick={() => setActiveSignatureRecord({ type: 'f10', id: row.id, name: row.type })} 
+                                  className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold"
+                                >
+                                  ፊርማ አስቀምጥ
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -4656,7 +6211,7 @@ export default function App() {
 
                   <div className="flex justify-end pt-3 border-t no-print">
                     <button onClick={() => window.print()} className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-1">
-                      <Printer className="w-3.5 h-3.5" /> <span>ቅጽ 010 አትም</span>
+                      <Printer className="w-3.5 h-3.5" /> <span>ቅፅ 010 አትም</span>
                     </button>
                   </div>
                 </div>
@@ -4721,13 +6276,13 @@ export default function App() {
                     </button>
                   </div>
                   <button onClick={() => exportToCSV('f011')} className="ml-auto bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center space-x-1">
-                    <Download className="w-3.5 h-3.5" /> <span>Excel (ቅጽ 011) አውርድ</span>
+                    <Download className="w-3.5 h-3.5" /> <span>Excel (ቅፅ 011) አውርድ</span>
                   </button>
                 </div>
 
                 {/* Form Inputs (011) with Built-in Signature Pad */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4 no-print text-xs">
-                  <h3 className="font-extrabold text-teal-950 border-b pb-2">ቅጽ 011 - በየዕለቱ አገልግሎት የተሰጣቸው ህትመቶች መመዝገቢያ</h3>
+                  <h3 className="font-extrabold text-teal-950 border-b pb-2">ቅፅ 011 - በየዕለቱ አገልግሎት የተሰጣቸው ህትመቶች መመዝገቢያ</h3>
                   
                   <form onSubmit={handleAddForm011} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -4799,7 +6354,7 @@ export default function App() {
 
                     <div className="flex justify-end pt-1">
                       <button type="submit" className="bg-teal-800 hover:bg-teal-900 border border-teal-700 text-white font-extrabold py-2 px-6 rounded-lg text-xs shadow">
-                        ወደ ቅጽ 011 ሰንጠረዥ ጨምር
+                        ወደ ቅፅ 011 ሰንጠረዥ ጨምር
                       </button>
                     </div>
                   </form>
@@ -4809,7 +6364,7 @@ export default function App() {
                 <div className="bg-white rounded-2xl p-6 md:p-8 border border-neutral-300 shadow-lg text-xs text-black space-y-4 print-area max-w-5xl mx-auto">
                   
                   <div className="text-center border-b pb-4 mb-4">
-                    <h2 className="text-base font-extrabold mt-1 text-slate-900">ቅጽ ቁጥር 011</h2>
+                    <h2 className="text-base font-extrabold mt-1 text-slate-900">ቅፅ ቁጥር 011</h2>
                     <h3 className="text-xs font-bold text-slate-700">በየዕለቱ አገልግሎት የተሰጣቸው ህትመቶች መመዝገቢያ እና ሪፖርት ማድረጊያ</h3>
                     <div className="flex justify-between mt-3 text-[10px] font-semibold text-slate-600 px-2 leading-none">
                       <div><strong>ክፍለ ከተማ:</strong> <span className="underline">ቦሌ</span></div>
@@ -4861,7 +6416,16 @@ export default function App() {
                               )}
                             </td>
                             <td className="border border-black p-1 no-print">
-                              <button onClick={() => deleteF11Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
+                              <div className="flex flex-col gap-1 items-center">
+                                <button type="button" onClick={() => deleteF11Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
+                                <button 
+                                  type="button" 
+                                  onClick={() => setActiveSignatureRecord({ type: 'f11', id: row.id, name: row.customer })} 
+                                  className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold"
+                                >
+                                  ፊርማ አስቀምጥ
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -4915,8 +6479,8 @@ export default function App() {
                   </div>
 
                   <div className="flex justify-end pt-3 border-t no-print">
-                    <button onClick={() => window.print()} className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-1">
-                      <Printer className="w-3.5 h-3.5" /> <span>ቅጽ 011 አትም</span>
+                    <button type="button" onClick={() => window.print()} className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-1">
+                      <Printer className="w-3.5 h-3.5" /> <span>ቅፅ 011 አትም</span>
                     </button>
                   </div>
 
@@ -4925,27 +6489,42 @@ export default function App() {
               </div>
             )}
 
-            {/* E. FORM 012 (ተመላሽና የተበላሸ) */}
             {adminTab === 'form012' && (
-              <div className="space-y-6">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
                 
-                 {/* Filters */}
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center no-print text-[11px] font-bold text-teal-950">
+                {/* Header */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4 no-print">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-red-50 rounded-2xl text-red-800">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">ቅፅ 012 - ተመላሽና የተበላሹ ህትመቶች መዝገብ (Form 012 Ledger)</h3>
+                      <p className="text-xs text-slate-500 mt-1">በወረዳ 05 የተበላሹ፣ ተመላሽ የተደረጉ ወይም ያልተሰጡ ምስክር ወረቀቶችና የህትመት ሰነዶች ዝርዝር መዝገብ መከታተያ</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-500 bg-slate-50 p-2 rounded-xl">
+                    የምዝገባ ቀን: <span className="font-sans font-bold text-slate-800">{ethDateNow}</span>
+                  </div>
+                </div>
+
+                {/* Search / Filter Section */}
+                <div className="bg-stone-50/50 border border-slate-100 p-4 rounded-2xl text-xs font-bold text-slate-700 flex flex-wrap items-center gap-4 no-print shadow-sm">
                   <div className="flex items-center space-x-1">
-                    <span>በእውቅና ማጣሪያ:</span>
+                    <span>በኩነት እይ:</span>
                     <select value={f12FilterServiceType} onChange={(e) => setF12FilterServiceType(e.target.value)} className="p-1 border rounded bg-white text-[10px]">
                       <option value="all">ሁሉንም አሳይ</option>
                       <option value="ልደት">ልደት</option>
                       <option value="ጋብቻ">ጋብቻ</option>
                       <option value="ፍቺ">ፍቺ</option>
                       <option value="ሞት">ሞት</option>
-                      <option value="ጉዲፈቻ">ጉዲፈቻ</option>
+                      <option value="ጉዲ">ጉዲፈቻ</option>
                       <option value="ያላገባ">ያላገባ</option>
                     </select>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <span>በመለያ:</span>
-                    <input type="text" value={f12FilterSerial} onChange={(e) => setF12FilterSerial(e.target.value)} placeholder="M-50" className="p-1 border rounded bg-white w-24 text-[10px] uppercase" />
+                    <span>በሴሪያል ፈልግ:</span>
+                    <input type="text" value={f12FilterSerial} onChange={(e) => setF12FilterSerial(e.target.value)} placeholder="ሴሪያል..." className="p-1 border rounded bg-white w-24 text-[10px] uppercase" />
                   </div>
                   <div className="flex items-center space-x-1">
                     <span>በቀን ፈልግ:</span>
@@ -4968,144 +6547,223 @@ export default function App() {
                   </div>
                   <div className="flex gap-1">
                     <button 
-                      type="button"
-                      onClick={() => setF12FilterDate(ethDateNow)}
-                      className={`px-2 py-1 rounded text-[10px] ${f12FilterDate === ethDateNow ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                      type="button" 
+                      onClick={() => setF12FilterDate(ethDateNow)} 
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-black px-2 py-1 rounded text-[9px] transition"
                     >
-                      የዛሬ ብቻ
+                      የዛሬ ብቻ አሳይ
                     </button>
-                    <button 
-                      type="button"
-                      onClick={() => setF12FilterDate('')}
-                      className={`px-2 py-1 rounded text-[10px] ${f12FilterDate === '' ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                    >
-                      ሁሉንም አሳይ
-                    </button>
+                    {(f12FilterServiceType !== 'all' || f12FilterSerial || f12FilterDate) && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setF12FilterServiceType('all');
+                          setF12FilterSerial('');
+                          setF12FilterDate('');
+                        }} 
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold px-2 py-1 rounded text-[9px] transition"
+                      >
+                        ማጣሪያ አጽዳ ✕
+                      </button>
+                    )}
                   </div>
-                  <button onClick={() => exportToCSV('f012')} className="ml-auto bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center space-x-1">
-                    <Download className="w-3.5 h-3.5" /> <span>Excel (ቅጽ 012) አውርድ</span>
-                  </button>
                 </div>
 
-                {/* Form Inputs (012) - no print */}
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4 no-print text-xs">
-                  <h3 className="font-extrabold text-teal-950 border-b pb-2">ቅጽ 012 - አገልግሎት ያልተሰጠበትና የተበላሸ ህትመት ተመላሽ ማድረጊያ</h3>
-                  
-                  <form onSubmit={handleAddForm012} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">የህትመት አይነት</label>
-                      <select value={f12PrintType} onChange={(e) => setF12PrintType(e.target.value)} className="w-full p-2 border rounded-md">
-                        <option>ልደት ምስክር ወረቀት</option>
-                        <option>ጋብቻ ምስክር ወረቀት</option>
-                        <option>ፍቺ ምስክር ወረቀት</option>
-                        <option>ሞት ምስክር ወረቀት</option>
-                        <option>ጉዲፈቻ ምስክር ወረቀት</option>
-                        <option>ያላገባ ምስክር ወረቀት</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">የተመላሽ አይነት</label>
-                      <select value={f12ReturnStatus} onChange={(e) => setF12ReturnStatus(e.target.value as any)} className="w-full p-2 border rounded-md">
-                        <option value="ያልተሰጠ">አገልግሎት ላይ ያልዋለ</option>
-                        <option value="የተበላሸ">የተበላሸ (Damaged)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">የህትመት ዘዴ</label>
-                      <select value={f12Method} onChange={(e) => setF12Method(e.target.value as any)} className="w-full p-2 border rounded-md">
-                        <option value="ሲስተም">በሲስተም (System)</option>
-                        <option value="ማኑዋል">በማኑዋል (Manual)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">ሴሪያል ቁጥር</label>
-                      <input type="text" value={f12Serial} onChange={(e) => setF12Serial(e.target.value)} placeholder="B-9912" className="w-full p-2 border rounded-md uppercase" required />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-teal-800 mb-1">ርክክብ የተደረገበት ቀን</label>
-                      <div className="flex space-x-1">
-                        <input type="text" value={f12Day} onChange={(e) => setF12Day(e.target.value)} className="w-1/4 p-2 border rounded-md text-center font-bold" />
-                        <select value={f12Month} onChange={(e) => setF12Month(e.target.value)} className="w-1/2 p-2 border rounded-md font-bold text-[11px]">
-                          {ethMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                {/* Add Entry Form */}
+                <div className="bg-[#fefcfb] border border-[#fbf3ec] p-5 rounded-2xl no-print shadow-sm">
+                  <h4 className="text-xs font-black text-[#5c3e0f] mb-3 flex items-center space-x-1.5 uppercase">
+                    <span>✦ አዲስ የቅፅ 012 ተመላሽ/የተበላሸ ህትመት መዝገብ ማስገቢያ</span>
+                  </h4>
+                  <form onSubmit={handleAddForm012} className="space-y-4 text-xs font-semibold">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">ምስክር ወረቀት አይነት (Print Type)</label>
+                        <select
+                          value={f12PrintType}
+                          onChange={(e) => setF12PrintType(e.target.value)}
+                          className="w-full p-2 border rounded-md bg-white font-bold"
+                        >
+                          <option value="ልደት ምስክር ወረቀት">ልደት ምስክር ወረቀት</option>
+                          <option value="ጋብቻ ምስክር ወረቀት">ጋብቻ ምስክር ወረቀት</option>
+                          <option value="ፍቺ ምስክር ወረቀት">ፍቺ ምስክር ወረቀት</option>
+                          <option value="ሞት ምስክር ወረቀት">ሞት ምስክር ወረቀት</option>
+                          <option value="ጉዲፈቻ ምስክር ወረቀት">ጉዲፈቻ ምስክር ወረቀት</option>
+                          <option value="ያላገባ ምስክር ወረቀት">ያላገባ ምስክር ወረቀት</option>
                         </select>
-                        <input type="text" value={f12Year} onChange={(e) => setF12Year(e.target.value)} className="w-1/4 p-2 border rounded-md text-center font-bold font-sans" />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">ሁኔታ (Status)</label>
+                        <select
+                          value={f12ReturnStatus}
+                          onChange={(e) => setF12ReturnStatus(e.target.value as any)}
+                          className="w-full p-2 border rounded-md bg-white font-bold"
+                        >
+                          <option value="ያልተሰጠ">ያልተሰጠ (Returned)</option>
+                          <option value="የተበላሸ">የተበላሸ (Spoiled)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">የህትመት ዘዴ (Print Method)</label>
+                        <div className="flex space-x-2 mt-1">
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input type="radio" name="f12_method" checked={f12Method === 'ሲስተም'} onChange={() => setF12Method('ሲስተም')} className="text-teal-800" />
+                            <span>ሲስተም</span>
+                          </label>
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input type="radio" name="f12_method" checked={f12Method === 'ማኑዋል'} onChange={() => setF12Method('ማኑዋል')} className="text-teal-800" />
+                            <span>ማኑዋል</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">የምስክር ወረቀቱ ሴሪያል ቁጥር (Serial No)</label>
+                        <input
+                          type="text"
+                          value={f12Serial}
+                          onChange={(e) => setF12Serial(e.target.value)}
+                          className="w-full p-2 border rounded-md uppercase font-mono font-bold"
+                          placeholder="A-12345"
+                        />
                       </div>
                     </div>
 
-                    <div className="md:col-span-3">
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">የተበላሸበት / ያልተሰጠበት ምክንያት</label>
-                      <input type="text" value={f12Reason} onChange={(e) => setF12Reason(e.target.value)} className="w-full p-2 border rounded-md" placeholder="እባክዎ የተበላሸበትን ትክክለኛ ምክንያት ይጻፉ" required />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">የዕለቱ ቀን (Ethiopian Date)</label>
+                        <div className="flex space-x-2">
+                          <input type="text" placeholder="ቀን" value={f12Day} onChange={(e) => setF12Day(e.target.value)} className="w-1/4 p-2 border rounded-md text-center text-[11px] font-bold" />
+                          <select value={f12Month} onChange={(e) => setF12Month(e.target.value)} className="w-2/4 p-2 border rounded-md text-center text-[11px] font-bold bg-white">
+                            <option value="">ወር ይምረጡ</option>
+                            {['መስከረም', 'ጥቅምት', 'ህዳር', 'ታህሳስ', 'ጥር', 'የካቲት', 'መጋቢት', 'ሚያዚያ', 'ግንቦት', 'ሰኔ', 'ሐምሌ', 'ነሐሴ', 'ጳጉሜ'].map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                          <input type="text" placeholder="ዓመት" value={f12Year} onChange={(e) => setF12Year(e.target.value)} className="w-1/4 p-2 border rounded-md text-center text-[11px] font-bold" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1">የተበላሸበት / የተመለሰበት ምክንያት (Reason / Remark)</label>
+                        <input
+                          type="text"
+                          value={f12Reason}
+                          onChange={(e) => setF12Reason(e.target.value)}
+                          className="w-full p-2 border rounded-md"
+                          placeholder="ምክንያቱን እዚህ ይግለጹ..."
+                        />
+                      </div>
                     </div>
 
-                    <div className="md:col-span-4 flex justify-end">
-                      <button type="submit" className="bg-teal-800 hover:bg-teal-900 text-white font-bold p-2 px-6 rounded-lg text-xs shadow">
-                        ወደ ሰንጠረዥ አስገባ
+                    {/* Integrated Signature Drawing Pad */}
+                    <div className="max-w-md pt-2">
+                      <label className="block text-[10px] font-bold text-teal-800 mb-1">የባለሙያ/የሱፐርቫይዘር ፊርማ (የማስፈረሚያ ሰሌዳ) - Mobile Touch Supported</label>
+                      <SignaturePad 
+                        onSave={(dataUrl) => setF12Signature(dataUrl)}
+                        placeholderText="ያረጋገጠው ባለሙያ እንዲፈርም እዚህ ሰሌዳ ላይ ይሳቡ (Draw signature inside this cell)"
+                      />
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button type="submit" className="bg-[#8c2d19] hover:bg-[#6e2211] text-white font-extrabold py-2 px-6 rounded-lg text-xs shadow-md transition">
+                        ወደ ቅፅ 012 ሰንጠረዥ ጨምር
                       </button>
                     </div>
                   </form>
                 </div>
 
-                {/* Printable 012 Layout sheet */}
-                <div className="bg-white rounded-2xl p-6 md:p-8 border border-neutral-300 shadow-lg text-xs text-black space-y-4 print-area max-w-5xl mx-auto">
-                  
-                  <div className="text-center border-b pb-4 mb-4">
-                    <h2 className="text-base font-extrabold mt-1 text-slate-900">ቅጽ ቁጥር 012</h2>
-                    <h3 className="text-xs font-bold text-slate-700">በየዕለቱ አገልግሎት ያልተሰጠበት እና የተበላሸ ህትመት ተመላሽ ማድረጊያ ቅጽ</h3>
-                    <div className="flex justify-between mt-3 text-[10px] font-semibold text-slate-600 px-2 leading-none">
-                      <div><strong>ክፍለ ከተማ:</strong> <span className="underline">ቦሌ</span></div>
-                      <div><strong>ወረዳ:</strong> <span className="underline">05</span></div>
-                      <div><strong>ቀን:</strong> <span className="underline font-bold text-teal-800">{f12FilterDate || ethDateNow}</span></div>
+                {/* Printable Form Container */}
+                <div className="border-4 border-double border-black p-4 bg-white shadow-lg relative print-section font-serif rounded-xl">
+                  {/* Decorative Ethiopian Corner Borders for Printable layout */}
+                  <div className="absolute top-1 left-1 border-t-2 border-l-2 border-stone-800 w-4 h-4 no-print"></div>
+                  <div className="absolute top-1 right-1 border-t-2 border-r-2 border-stone-800 w-4 h-4 no-print"></div>
+                  <div className="absolute bottom-1 left-1 border-b-2 border-l-2 border-stone-800 w-4 h-4 no-print"></div>
+                  <div className="absolute bottom-1 right-1 border-b-2 border-r-2 border-stone-800 w-4 h-4 no-print"></div>
+
+                  <div className="text-center space-y-2 pb-3 border-b-2 border-black/80">
+                    <h1 className="text-sm font-black text-slate-900 tracking-wide">በአዲስ አበባ ከተማ አስተዳደር የአስገዳጅ ምዝገባና የነዋሪነት አገልግሎት ኤጀንሲ</h1>
+                    <h2 className="text-xs font-black text-slate-800">የቦሌ ክፍለ ከተማ ወረዳ 05 አስተዳደር ጽሕፈት ቤት</h2>
+                    <div className="bg-stone-900 text-white font-sans text-[10px] font-extrabold tracking-widest uppercase inline-block px-4 py-1.5 rounded-full mt-1.5 print:bg-black print:text-white print:px-6">
+                      ቅፅ ቁጥር 012 - ተመላሽና የተበላሹ ህትመቶች መዝገብ
                     </div>
+                    <p className="text-[10px] text-gray-600 font-sans font-bold no-print">ይህ መዝገብ በየዕለቱ የሚበላሹ ወይም ጥቅም ላይ ሳይውሉ የሚቀሩ ምስክር ወረቀቶችን ለመቆጣጠር ያገለግላል።</p>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-center border-collapse border-2 border-black text-[10px]">
+                  <div className="flex justify-between items-center text-[10px] font-bold py-2 font-sans text-slate-800 border-b border-stone-200">
+                    <div>ወረዳ: <span className="underline decoration-indigo-800 font-bold">ወረዳ 05</span></div>
+                    <div>መረካከቢያ ቀን/ዕለት: <span className="underline decoration-indigo-800 font-bold">{ethDateNow}</span></div>
+                    <div>ጠቅላላ የተበላሹ/ተመላሾች: <span className="underline font-bold text-red-700">{filteredForm012.length} ህትመቶች</span></div>
+                  </div>
+
+                  <div className="overflow-x-auto pt-3">
+                    <table className="w-full text-center border-collapse border-2 border-black text-[9px]">
                       <thead>
-                        <tr className="bg-slate-100 font-bold">
-                          <th className="border border-black p-1.5" rowSpan={2}>ተ.ቁ</th>
-                          <th className="border border-black p-1.5" rowSpan={2}>የህትመት አይነት</th>
-                          <th className="border border-black p-1.5" colSpan={2}>የተመላሽ ሁኔታ</th>
-                          <th className="border border-black p-1.5" colSpan={2}>የህትመት ዘዴ</th>
-                          <th className="border border-black p-1.5" rowSpan={2}>ሴሪያል ቁጥር</th>
-                          <th className="border border-black p-1.5" rowSpan={2}>ርክክብ የተደረገበት ዕለት</th>
-                          <th className="border border-black p-1.5 text-left" rowSpan={2}>የተበላሸበት ምክንያት</th>
-                          <th className="border border-black p-1.5 no-print" rowSpan={2}>ድርጊት</th>
+                        <tr className="bg-slate-100 font-bold text-slate-900">
+                          <th className="border border-black p-1" rowSpan={2}>ተ.ቁ</th>
+                          <th className="border border-black p-1" rowSpan={2}>የምዝገባ ቀን</th>
+                          <th className="border border-black p-1" rowSpan={2}>የምስክር ወረቀቱ ዓይነት</th>
+                          <th className="border border-black p-1" colSpan={2}>የመመለስ ሁኔታ</th>
+                          <th className="border border-black p-1" colSpan={2}>የህትመት ዘዴ</th>
+                          <th className="border border-black p-1" rowSpan={2}>የምስክር ወረቀቱ ሴሪያል</th>
+                          <th className="border border-black p-1" rowSpan={2}>የተበላሸበት/የተመለሰበት ምክንያት</th>
+                          <th className="border border-black p-1" rowSpan={2}>አረጋጋጭ ፊርማ</th>
+                          <th className="border border-black p-1 no-print" rowSpan={2}>ድርጊት</th>
                         </tr>
                         <tr className="bg-slate-50 font-bold">
-                          <th className="border border-black p-1">አገልግሎት ላይ ያልዋለ (✓)</th>
+                          <th className="border border-black p-1">ያልተሰጠ (✓)</th>
                           <th className="border border-black p-1">የተበላሸ (✓)</th>
                           <th className="border border-black p-1">ማኑዋል (✓)</th>
                           <th className="border border-black p-1">ሲስተም (✓)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/40 font-medium">
-                        {filteredForm012.map((row, idx) => (
-                          <tr key={row.id}>
-                            <td className="border border-black p-1.5">{idx + 1}</td>
-                            <td className="border border-black p-1.5 text-left font-bold">{row.printType}</td>
-                            <td className="border border-black p-1.5">{row.returnStatus === 'ያልተሰጠ' ? '✓' : ''}</td>
-                            <td className="border border-black p-1.5">{row.returnStatus === 'የተበላሸ' ? '✓' : ''}</td>
-                            <td className="border border-black p-1.5">{row.method === 'ማኑዋል' ? '✓' : ''}</td>
-                            <td className="border border-black p-1.5">{row.method === 'ሲስተም' ? '✓' : ''}</td>
-                            <td className="border border-black p-1.5 font-mono font-bold">{row.serial}</td>
-                            <td className="border border-black p-1.5 font-bold">{row.date}</td>
-                            <td className="border border-black p-1.5 text-left text-[9px]">{row.reason}</td>
-                            <td className="border border-black p-1.5 no-print">
-                              <button onClick={() => deleteF12Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
-                            </td>
+                        {filteredForm012.length === 0 ? (
+                          <tr>
+                            <td colSpan={11} className="p-4 text-center text-slate-400 italic font-sans text-[10px]">በዚህ ሪፖርት ውስጥ የተመዘገበ መረጃ የለም።</td>
                           </tr>
-                        ))}
+                        ) : (
+                          filteredForm012.map((row, idx) => (
+                            <tr key={row.id}>
+                              <td className="border border-black p-1 font-mono">{idx + 1}</td>
+                              <td className="border border-black p-1 font-bold">{row.date}</td>
+                              <td className="border border-black p-1 text-left font-bold text-slate-800">{row.printType}</td>
+                              <td className="border border-black p-1 font-bold">{row.returnStatus === 'ያልተሰጠ' ? '✓' : ''}</td>
+                              <td className="border border-black p-1 font-bold">{row.returnStatus === 'የተበላሸ' ? '✓' : ''}</td>
+                              <td className="border border-black p-1">{row.method === 'ማኑዋል' ? '✓' : ''}</td>
+                              <td className="border border-black p-1">{row.method === 'ሲስተም' ? '✓' : ''}</td>
+                              <td className="border border-black p-1 font-mono font-bold text-slate-900">{row.serial}</td>
+                              <td className="border border-black p-1 text-left font-sans text-[10px] max-w-[150px] truncate" title={row.reason}>{row.reason || '-'}</td>
+                              <td className="border border-black p-1 text-center font-sans">
+                                {row.signature ? (
+                                  <img src={row.signature} className="h-6 mx-auto bg-white border" alt="Sig" />
+                                ) : (
+                                  <span className="text-slate-400 italic text-[8px]">ፊርማ የለም</span>
+                                )}
+                              </td>
+                              <td className="border border-black p-1 no-print">
+                                <div className="flex flex-col gap-1 items-center">
+                                  <button type="button" onClick={() => deleteF12Row(row.id)} className="text-red-600 hover:text-red-800 font-bold">ሰርዝ</button>
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setActiveSignatureRecord({ type: 'f12', id: row.id, name: row.serial })} 
+                                    className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded px-1.5 py-0.5 text-[9px] font-bold"
+                                  >
+                                    ፊርማ አስቀምጥ
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8 pt-4 border-t border-slate-300 text-[9px] text-gray-700">
                     <div className="border p-2 rounded bg-stone-50">
-                      <p className="font-bold border-b pb-1 mb-1 text-slate-900">አስረካቢ ባለሙያ</p>
+                      <p className="font-bold border-b pb-1 mb-1 text-slate-900">ያረጋገጠው ባለሙያ</p>
                       <div className="space-y-1 mt-1">
                         <span className="no-print text-[8px] text-gray-400 block">የባለሙያ ስም:</span>
                         <input
@@ -5119,7 +6777,7 @@ export default function App() {
                       </div>
                     </div>
                     <div className="border p-2 rounded bg-stone-50">
-                      <p className="font-bold border-b pb-1 mb-1 text-slate-900">ተረካቢ ቡድን መሪ</p>
+                      <p className="font-bold border-b pb-1 mb-1 text-slate-900">ያረጋገጠው የቡድን መሪ</p>
                       <div className="space-y-1 mt-1">
                         <span className="no-print text-[8px] text-gray-400 block">የቡድን መሪ ስም:</span>
                         <input
@@ -5132,10 +6790,10 @@ export default function App() {
                         <p className="pt-1">ፊርማ: _______________</p>
                       </div>
                     </div>
-                    <div className="border p-2 rounded bg-teal-50/50 border-teal-100">
-                      <p className="font-bold border-b pb-1 mb-1 text-red-950">ያጸደቀው የጽ/ቤት ኃላፊ</p>
+                    <div className="border p-2 rounded bg-stone-50">
+                      <p className="font-bold border-b pb-1 mb-1 text-slate-900">ያጸደቀው የጽ/ቤት ኃላፊ</p>
                       <div className="space-y-1 mt-1">
-                        <span className="no-print text-[8px] text-red-700 block">የኃላፊው ስም:</span>
+                        <span className="no-print text-[8px] text-gray-400 block">የኃላፊው ስም:</span>
                         <input
                           type="text"
                           value={f12SigneeYatzedeqew}
@@ -5149,8 +6807,8 @@ export default function App() {
                   </div>
 
                   <div className="flex justify-end pt-3 border-t no-print">
-                    <button onClick={() => window.print()} className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-1">
-                      <Printer className="w-3.5 h-3.5" /> <span>ቅጽ 012 አትም</span>
+                    <button type="button" onClick={() => window.print()} className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-1">
+                      <Printer className="w-3.5 h-3.5" /> <span>ቅፅ 012 አትም</span>
                     </button>
                   </div>
 
@@ -5159,7 +6817,152 @@ export default function App() {
               </div>
             )}
 
-            {/* F. SECURITY & BACKUP PANEL */}
+            {/* G2. SERVICE PREREQUISITES TAB */}
+            {adminTab === 'prerequisites' && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-6 font-sans">
+                {/* Header */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-teal-50 rounded-xl text-teal-800">
+                      <BookOpen className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">የአገልግሎት ማስፈጸሚያ ቅድመ ሁኔታዎች ማስተካከያ</h3>
+                      <p className="text-xs text-slate-500 mt-1">በወረዳ 05 ለሚሰጡ የሲቪል፣ የነዋሪነት እና የሰነድ አገልግሎቶች አስፈላጊ መስፈርቶችን ያስተካክሉ</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewPrerequisiteCat('civil')}
+                      className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 transition cursor-pointer"
+                    >
+                      <span>+ አዲስ ሲቪል ምዝገባ አክል</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewPrerequisiteCat('residency')}
+                      className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 transition cursor-pointer"
+                    >
+                      <span>+ አዲስ የነዋሪነት አክል</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewPrerequisiteCat('documents')}
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 transition cursor-pointer"
+                    >
+                      <span>+ አዲስ የሰነድ አክል</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Form fields */}
+                <div className="space-y-4 text-xs font-semibold">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">ለማስተካከል የሚፈልጉትን አገልግሎት ይምረጡ (Select Service to Customize)</label>
+                      <select
+                        value={editingReqId}
+                        onChange={(e) => setEditingReqId(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-800 focus:ring-2 focus:ring-teal-700 focus:outline-none cursor-pointer"
+                      >
+                        <option value="">-- አገልግሎት ይምረጡ --</option>
+                        {requirements.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            [{r.category === 'civil' ? 'ሲቪል' : r.category === 'residency' ? 'ነዋሪነት' : 'ሰነድ'}] {r.subCategory || r.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">የአገልግሎቱ ርዕስ (Service Display Title)</label>
+                      <input
+                        type="text"
+                        value={editingReqTitle}
+                        onChange={(e) => setEditingReqTitle(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold focus:ring-2 focus:ring-teal-700 focus:outline-none text-xs"
+                        placeholder="የአገልግሎት ማስፈጸሚያ ርዕስ እዚህ ይጻፉ..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold">የአገልግሎቱ አጭር መግለጫ (Service Description)</label>
+                    <textarea
+                      value={editingReqDesc}
+                      onChange={(e) => setEditingReqDesc(e.target.value)}
+                      rows={3}
+                      className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-sans focus:outline-none focus:ring-2 focus:ring-teal-700 focus:bg-white text-xs leading-relaxed font-semibold font-bold"
+                      placeholder="ለአመልካቹ የሚያስፈልገውን የአገልግሎት አይነት ሁኔታዎችና መግለጫዎች እዚህ ይጻፉ..."
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">ያስገዳጅ ቅድመ-ሁኔታዎች ዝርዝር (Requirements Points List)</label>
+                      <span className="text-[9px] text-[#0a3651] font-bold">በእያንዳንዱ መስመር ላይ አንድ መስፈርት ብቻ ይጻፉ (One requirement per line)</span>
+                    </div>
+                    <textarea
+                      value={editingReqPointsText}
+                      onChange={(e) => setEditingReqPointsText(e.target.value)}
+                      rows={6}
+                      className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-sans focus:outline-none focus:ring-2 focus:ring-teal-700 focus:bg-white text-xs leading-relaxed font-semibold font-bold"
+                      placeholder="መስፈርት 1&#10;መስፈርት 2&#10;መስፈርት 3..."
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center gap-3">
+                  {editingReqId ? (
+                    <button 
+                      type="button"
+                      onClick={() => handleDeletePrerequisite(editingReqId)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2 px-4 rounded-xl transition text-xs flex items-center space-x-1.5 border border-rose-200 cursor-pointer"
+                      title="ይህንን የአገልግሎት መስፈርት ይቀንሱ / ይሰርዙ"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> 
+                      <span>ይህንን አገልግሎት ይቀንሱ (Delete)</span>
+                    </button>
+                  ) : <div></div>}
+                  <button 
+                    type="button"
+                    onClick={handleSavePrerequisite}
+                    className="bg-[#0f405c] hover:bg-[#072436] text-white font-extrabold py-2.5 px-6 rounded-xl shadow-md transition text-xs flex items-center space-x-2 cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4" /> <span>የአገልግሎቱን ቅድመ ሁኔታ አስቀምጥ (Save Prerequisite)</span>
+                  </button>
+                </div>
+
+                {/* Wipe All Data Panel inside settings */}
+                <div className="mt-8 pt-6 border-t border-rose-100 space-y-4 bg-rose-50/40 p-5 rounded-2xl border border-rose-100">
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2.5 bg-rose-50 rounded-xl text-rose-750">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-rose-950">ሲስተሙን ሙሉ በሙሉ በአዲስ መልክ ማስጀመር (Reset / Wipe All Records)</h4>
+                      <p className="text-[10px] text-rose-600 mt-1 leading-relaxed font-sans">
+                        ይህንን ቁልፍ በመጫን በሲስተሙ ውስጥ ከዚህ በፊት የገቡትን ሁሉንም የመታወቂያ በርክክብ፣ የሰነዶች፣ የቅፅ 010፣ የቅፅ 011 እና 012 የድሮ መረጃዎችን በሙሉ መደምሰስ ይችላሉ። ይህ በኮምፒውተርዎ ላይ ያለውንም ሆነ በደመና (Cloud Database) ያሉትን መረጃዎች ጠርጎ በማጥፋት እስከዛሬ የገቡ ዳታዎች ጠፍተው ስራውን በአዲስ መልክ ከዛሬ ጀምሮ ለማካሄድ ዝግጁ ያደርገዋል።
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleResetAllData}
+                      className="bg-rose-700 hover:bg-rose-800 text-white border border-rose-640 font-extrabold py-2 px-4 rounded-xl shadow-sm transition text-[10px] uppercase tracking-wider block cursor-pointer"
+                    >
+                      ሁሉንም የቀድሞ መረጃዎች አጥፋ (Wipe All Records)
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* G. SECURITY AND DATA MANAGEMENT */}
             {adminTab === 'security' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
                 
@@ -5172,7 +6975,7 @@ export default function App() {
                     <div>
                       <h3 className="text-base font-extrabold text-slate-900">የመረጃ ደህንነት ቅጂ ማውረጃ (Backup & Encrypt System Data)</h3>
                       <p className="text-xs text-slate-500 leading-relaxed mt-1 font-sans">
-                        ሁሉንም የወረዳ 05 መረጃዎችን (የመታወቂያ ክምችት፣ የሰነዶች መዝገብ፣ እና የቅጽ 010, 011 እና 012 ሪከርዶችን) በአንድ ላይ በማጣመር በጠንካራ የሚስጥር ቁልፍ (Passphrase) የይለፍ ቃል የተመሰጠረ የJSON ፋይል ለመፍጠር ይህንን ቁልፍ ይጫኑ። ይህ ፋይል አሁን ካለው የደመና ወይም የአካባቢ ሰሌዳ ውጭ በደህንነት ለማስቀመጥ ያገለግላል።
+                        ሁሉንም የወረዳ 05 መረጃዎችን (የመታወቂያ ክምችት፣ የሰነዶች መዝገብ፣ እና የቅፅ 010, 011 እና 012 ሪከርዶችን) በአንድ ላይ በማጣመር በጠንካራ የሚስጥር ቁልፍ (Passphrase) የይለፍ ቃል የተመሰጠረ የJSON ፋይል ለመፍጠር ይህንን ቁልፍ ይጫኑ። ይህ ፋይል አሁን ካለው የደመና ወይም የአካባቢ ሰሌዳ ውጭ በደህንነት ለማስቀመጥ ያገለግላል።
                       </p>
                     </div>
 
@@ -5189,15 +6992,15 @@ export default function App() {
                         </li>
                         <li className="flex items-center space-x-2">
                           <Check className="w-4 h-4 text-teal-600 shrink-0" />
-                          <span>ቅጽ 010 የዕለት ህትመት ስርጭት መረጃ ({form010.length} ሪኮርድ)</span>
+                          <span>ቅፅ 010 የዕለት ህትመት ስርጭት መረጃ ({form010.length} ሪኮርድ)</span>
                         </li>
                         <li className="flex items-center space-x-2">
                           <Check className="w-4 h-4 text-teal-600 shrink-0" />
-                          <span>ቅጽ 011 የዕለት አገልግሎት ያገኙ ተጠቃሚዎች ({form011.length} ሪኮርድ)</span>
+                          <span>ቅፅ 011 የዕለት አገልግሎት ያገኙ ተጠቃሚዎች ({form011.length} ሪኮርድ)</span>
                         </li>
                         <li className="flex items-center space-x-2">
                           <Check className="w-4 h-4 text-teal-600 shrink-0" />
-                          <span>ቅጽ 012 ተመላሽና የተበላሹ ህትመቶች ({form012.length} ሪኮርድ)</span>
+                          <span>ቅፅ 012 ተመላሽና የተበላሹ ህትመቶች ({form012.length} ሪኮርድ)</span>
                         </li>
                       </ul>
                     </div>
@@ -5236,221 +7039,471 @@ export default function App() {
                         </p>
                       </div>
                     </div>
-
-                    {/* Drag and Drop File Input Area */}
-                    <div className="relative border-2 border-dashed border-slate-200 hover:border-teal-500 rounded-2xl p-6 transition text-center cursor-pointer bg-slate-50 group">
-                      <input 
-                        type="file" 
-                        accept=".json"
-                        onChange={handleRestoreData}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="space-y-2 pointer-events-none">
-                        <Download className="w-8 h-8 text-slate-400 mx-auto group-hover:text-teal-600 transition" />
-                        <div className="text-xs font-bold text-slate-700">የባክአፕ ፋይሉን እዚህ ይጎትቱ ወይም ይጫኑ</div>
-                        <div className="text-[10px] text-slate-400">የተገደበ ቅርጸት፡ .json (ይለፍ ቃል የተጫነበት)</div>
-                      </div>
-                    </div>
                   </div>
 
-                  <div className="text-[10px] text-slate-400 leading-relaxed text-center font-medium">
-                    ማስታወሻ፡ ፋይሉን መፍታት ከተሳካ በኋላ የሲስተሙ መረጃዎች ሁሉ ወዲያውኑ ይሻሻላሉ።
+                  <div className="pt-4 border-t border-slate-100">
+                    <label className="w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center space-x-2 text-xs cursor-pointer text-center">
+                      <RefreshCw className="w-4 h-4" />
+                      <span>የደህንነት ቅጂ ፋይል ምረጥ (Upload Backup File)</span>
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        onChange={handleRestoreData} 
+                        className="hidden" 
+                      />
+                    </label>
                   </div>
                 </div>
 
               </div>
             )}
 
-            {/* G. CIVIL PREREQUISITES AND RESET SYSTEM PANEL */}
-            {adminTab === 'prerequisites' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 no-print font-sans">
-                
-                {/* Left side list of services grouped by categories */}
-                <div className="lg:col-span-4 bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="text-[10px] font-bold text-slate-400 tracking-widest block font-extrabold uppercase">የአገልግሎቶች ዝርዝር (Services list)</span>
-                  </div>
-                  
-                  {/* Group 1: የሲቪል ምዝገባ */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center bg-teal-50 px-2.5 py-1.5 rounded-xl text-teal-850">
-                      <span className="text-[9px] font-black uppercase">የሲቪል ምዝገባ (Civil)</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleAddNewPrerequisiteCat('civil')}
-                        className="text-[9px] font-black bg-white hover:bg-teal-100 text-teal-800 px-2 py-0.5 rounded-lg border border-teal-200 transition"
-                        title="አዲስ የሲቪል ምዝገባ አገልግሎት ጨምር"
-                      >
-                        + ጨምር (Add)
-                      </button>
-                    </div>
-                    <div className="space-y-1 pt-1.5">
-                      {requirements.filter(r => r.category === 'civil').map((req) => (
-                        <button
-                          key={req.id}
-                          type="button"
-                          onClick={() => setEditingReqId(req.id)}
-                          className={`w-full text-left p-3 rounded-xl font-bold flex justify-between items-center transition ${editingReqId === req.id ? 'bg-[#0a3651] text-white shadow-sm' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
-                        >
-                          <span className="text-[10px] truncate">{req.subCategory}</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+            {/* AUDIT TRAIL LOG PANEL */}
+            {adminTab === 'audit' && (() => {
+              const fromStr = (auditFilterFromDay && auditFilterFromMonth && auditFilterFromYear) ? `${auditFilterFromDay}/${auditFilterFromMonth}/${auditFilterFromYear}` : '';
+              const toStr = (auditFilterToDay && auditFilterToMonth && auditFilterToYear) ? `${auditFilterToDay}/${auditFilterToMonth}/${auditFilterToYear}` : '';
 
-                  {/* Group 2: የነዋሪ አገልግሎት */}
-                  <div className="space-y-1 pt-2">
-                    <div className="flex justify-between items-center bg-slate-100 px-2.5 py-1.5 rounded-xl text-slate-800">
-                      <span className="text-[9px] font-black uppercase">የነዋሪ አገልግሎት (Resident)</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleAddNewPrerequisiteCat('residency')}
-                        className="text-[9px] font-black bg-white hover:bg-slate-200 text-slate-800 px-2 py-0.5 rounded-lg border border-slate-300 transition"
-                        title="አዲስ የነዋሪ አገልግሎት ጨምር"
-                      >
-                        + ጨምር (Add)
-                      </button>
-                    </div>
-                    <div className="space-y-1 pt-1.5">
-                      {requirements.filter(r => r.category === 'residency').map((req) => (
-                        <button
-                          key={req.id}
-                          type="button"
-                          onClick={() => setEditingReqId(req.id)}
-                          className={`w-full text-left p-3 rounded-xl font-bold flex justify-between items-center transition ${editingReqId === req.id ? 'bg-[#0a3651] text-white shadow-sm' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
-                        >
-                          <span className="text-[10px] truncate">{req.subCategory}</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              const hasDateFilter = !!fromStr || !!toStr;
 
-                  {/* Group 3: የሰነድ ማረጋገጫ */}
-                  <div className="space-y-1 pt-2">
-                    <div className="flex justify-between items-center bg-indigo-50 px-2.5 py-1.5 rounded-xl text-indigo-900">
-                      <span className="text-[9px] font-black uppercase">የሰነድ ማረጋገጫ (Verify)</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleAddNewPrerequisiteCat('documents')}
-                        className="text-[9px] font-black bg-white hover:bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-lg border border-indigo-200 transition"
-                        title="አዲስ የሰነድ ማረጋገጫ አገልግሎት ጨምር"
-                      >
-                        + ጨምር (Add)
-                      </button>
-                    </div>
-                    <div className="space-y-1 pt-1.5">
-                      {requirements.filter(r => r.category === 'documents').map((req) => (
-                        <button
-                          key={req.id}
-                          type="button"
-                          onClick={() => setEditingReqId(req.id)}
-                          className={`w-full text-left p-3 rounded-xl font-bold flex justify-between items-center transition ${editingReqId === req.id ? 'bg-[#0a3651] text-white shadow-sm' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
-                        >
-                          <span className="text-[10px] truncate">{req.subCategory}</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              // Filter by date range if specified
+              const activeIdInventory = hasDateFilter
+                ? idInventory.filter(x => {
+                    const d = x.pickupDate || x.registrationDate || '';
+                    return d ? isDateWithinRange(d, fromStr, toStr) : true;
+                  })
+                : idInventory;
 
-                {/* Right side form editor */}
-                <div className="lg:col-span-8 bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-5 font-semibold">
-                  <div className="pb-3 border-b border-slate-100">
-                    <span className="text-[10px] font-bold text-[#0a3651] uppercase tracking-widest block font-extrabold">የተመረጠው አገልግሎት ቅድመ ሁኔታዎች ማስተካከያ (Prerequisite Editor)</span>
-                    <h3 className="text-base font-extrabold text-slate-900 mt-1">
-                      {requirements.find(r => r.id === editingReqId)?.title || "አገልግሎት ማስተካከያ"}
-                    </h3>
-                  </div>
+              const activeForm010 = hasDateFilter
+                ? form010.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+                : form010;
 
-                  <div className="grid grid-cols-1 gap-4 text-xs font-semibold">
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">የአገልግሎት ስም/ራስጌ (Service Title Header)</label>
-                      <input 
-                        type="text"
-                        value={editingReqTitle}
-                        onChange={(e) => setEditingReqTitle(e.target.value)}
-                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-sans focus:outline-none focus:ring-2 focus:ring-teal-700 focus:bg-white text-xs font-bold"
-                        placeholder="የአገልግሎቱ ርዕስ..."
-                      />
-                    </div>
+              const activeForm011 = hasDateFilter
+                ? form011.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+                : form011;
 
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">የተብራራ ማብራሪያ መግለጫ (Detailed Explanation Paragraph)</label>
-                      <textarea
-                        value={editingReqDesc}
-                        onChange={(e) => setEditingReqDesc(e.target.value)}
-                        rows={3}
-                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-sans focus:outline-none focus:ring-2 focus:ring-teal-700 focus:bg-white text-xs leading-relaxed font-semibold font-bold"
-                        placeholder="ለአመልካቹ የሚያስፈልገውን የአገልግሎት አይነት ሁኔታዎችና መግለጫዎች እዚህ ይጻፉ..."
-                      />
-                    </div>
+              const activeForm012 = hasDateFilter
+                ? form012.filter(x => x.date && isDateWithinRange(x.date, fromStr, toStr))
+                : form012;
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-[10px] uppercase text-slate-400 font-bold">ያስገዳጅ ቅድመ-ሁኔታዎች ዝርዝር (Requirements Points List)</label>
-                        <span className="text-[9px] text-[#0a3651] font-bold">በእያንዳንዱ መስመር ላይ አንድ መስፈርት ብቻ ይጻፉ (One requirement per line)</span>
+              // Precompute the values
+              const totalFromSubCity = activeIdInventory.length;
+              const readyNotPicked = activeIdInventory.filter(x => x.status === 'ለመረከብ ዝግጁ').length;
+              const pickedUp = activeIdInventory.filter(x => x.status === 'የወሰደ').length;
+              const auditMatch = totalFromSubCity === (readyNotPicked + pickedUp);
+
+              // Form 010 Subcity Grouped (from Sub-city)
+              const form010SubCityGrouped = activeForm010
+                .filter(record => !record.handoverType || record.handoverType === 'የክፍለከተማ መረካከቢያ')
+                .reduce((acc, record) => {
+                  const type = record.type || 'ያልታወቀ';
+                  if (!acc[type]) {
+                    acc[type] = { type, ranges: [] as { from: string; to: string }[], totalQty: 0 };
+                  }
+                  acc[type].ranges.push({ from: record.from, to: record.to });
+                  acc[type].totalQty += Number(record.qty || 0);
+                  return acc;
+                }, {} as Record<string, { type: string; ranges: { from: string; to: string }[]; totalQty: number }>);
+
+              // Form 010 Woreda Grouped (from Woreda)
+              const form010WoredaGrouped = activeForm010
+                .filter(record => record.handoverType === 'የወረዳ መረካከቢያ')
+                .reduce((acc, record) => {
+                  const type = record.type || 'ያልታወቀ';
+                  if (!acc[type]) {
+                    acc[type] = { type, ranges: [] as { from: string; to: string }[], totalQty: 0 };
+                  }
+                  acc[type].ranges.push({ from: record.from, to: record.to });
+                  acc[type].totalQty += Number(record.qty || 0);
+                  return acc;
+                }, {} as Record<string, { type: string; ranges: { from: string; to: string }[]; totalQty: number }>);
+
+              // Form 011 Grouped
+              const form011Grouped = activeForm011.reduce((acc, record) => {
+                const type = record.serviceType || 'ያልታወቀ';
+                if (!acc[type]) {
+                  acc[type] = { type, records: [] as typeof record[] };
+                }
+                acc[type].records.push(record);
+                return acc;
+              }, {} as Record<string, { type: string; records: typeof form011 }>);
+
+              // Form 012 Grouped
+              const form012Grouped = activeForm012.reduce((acc, record) => {
+                const type = record.printType || 'ያልታወቀ';
+                if (!acc[type]) {
+                  acc[type] = { type, records: [] as typeof record[] };
+                }
+                acc[type].records.push(record);
+                return acc;
+              }, {} as Record<string, { type: string; records: typeof form012 }>);
+
+              return (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-6 no-print font-sans animate-fade-in">
+                  {/* Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-3 bg-rose-50 rounded-xl text-rose-800">
+                        <Activity className="w-6 h-6 animate-pulse" />
                       </div>
-                      <textarea
-                        value={editingReqPointsText}
-                        onChange={(e) => setEditingReqPointsText(e.target.value)}
-                        rows={6}
-                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-sans focus:outline-none focus:ring-2 focus:ring-teal-700 focus:bg-white text-xs leading-relaxed font-semibold font-bold"
-                        placeholder="መስፈርት 1&#10;መስፈርት 2&#10;መስፈርት 3..."
-                      />
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900">የሰነድ ቁጥጥር እና የኦዲት መከታተያ ማዕከል</h3>
+                        <p className="text-xs text-slate-500 mt-1">በቦሌ ክፍለ ከተማ ወረዳ 05 አስተዳደር የኦዲት መረጃዎች ማጠቃለያ</p>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center gap-3">
-                    {editingReqId ? (
-                      <button 
-                        type="button"
-                        onClick={() => handleDeletePrerequisite(editingReqId)}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2 px-4 rounded-xl transition text-xs flex items-center space-x-1.5 border border-rose-200"
-                        title="ይህንን የአገልግሎት መስፈርት ይቀንሱ / ይሰርዙ"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> 
-                        <span>ይህንን አገልግሎት ይቀንሱ (Delete)</span>
-                      </button>
-                    ) : <div></div>}
-                    <button 
-                      type="button"
-                      onClick={handleSavePrerequisite}
-                      className="bg-[#0f405c] hover:bg-[#072436] text-white font-extrabold py-2.5 px-6 rounded-xl shadow-md transition text-xs flex items-center space-x-2"
+                    
+                    <button
+                      onClick={handlePrintAuditReport}
+                      className="bg-slate-950 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black flex items-center space-x-2 transition cursor-pointer shadow-sm shadow-slate-200"
                     >
-                      <FileText className="w-4 h-4" /> <span>የአገልግሎቱን ቅድመ ሁኔታ አስቀምጥ (Save Prerequisite)</span>
+                      <Printer className="w-4 h-4" />
+                      <span>የኦዲት ሪፖርት አትም / በPDF አውርድ</span>
                     </button>
                   </div>
 
-                  {/* Wipe All Data Panel inside settings */}
-                  <div className="mt-8 pt-6 border-t border-rose-100 space-y-4 bg-rose-50/40 p-5 rounded-2xl border border-rose-100">
-                    <div className="flex items-start space-x-3">
-                      <div className="p-2.5 bg-rose-50 rounded-xl text-rose-750">
-                        <Trash2 className="w-5 h-5" />
-                      </div>
+                  {/* DATE RANGE FILTER PANEL */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs font-semibold">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 border-slate-200">
                       <div>
-                        <h4 className="text-xs font-black text-rose-950">ሲስተሙን ሙሉ በሙሉ በአዲስ መልክ ማስጀመር (Reset / Wipe All Records)</h4>
-                        <p className="text-[10px] text-rose-600 mt-1 leading-relaxed font-sans">
-                          ይህንን ቁልፍ በመጫን በሲስተሙ ውስጥ ከዚህ በፊት የገቡትን ሁሉንም የመታወቂያ በርክክብ፣ የሰነዶች፣ የቅጽ 010፣ የቅጽ 011 እና 012 የድሮ መረጃዎችን በሙሉ መደምሰስ ይችላሉ። ይህ በኮምፒውተርዎ ላይ ያለውንም ሆነ በደመና (Cloud Database) ያሉትን መረጃዎች ጠርጎ በማጥፋት እስከዛሬ የገቡ ዳታዎች ጠፍተው ስራውን በአዲስ መልክ ከዛሬ ጀምრო ለማካሄድ ዝግጁ ያደርገዋል።
-                        </p>
+                        <h4 className="text-xs font-extrabold text-teal-900 flex items-center gap-1.5 uppercase tracking-wider">
+                          📅 የኦዲት መረጃዎች መፈለጊያ (የቀን ክልል ማጣሪያ)
+                        </h4>
+                        <p className="text-[10px] text-slate-500 font-bold mt-0.5">የመታወቂያ ርክክብ እና የቅጾች መረጃን ከተወሰነ ቀን እስከ የተወሰነ ቀን ድረስ መርጠው ይፈልጉ</p>
+                      </div>
+                      {hasDateFilter && (
+                        <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full text-[10px] font-black">
+                          ✓ የቀን ማጣሪያ ነቅቷል
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* From Date */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">ከቀን (Start Date - Ethiopian):</label>
+                        <div className="flex space-x-1.5">
+                          <input 
+                            type="text" 
+                            placeholder="ቀን" 
+                            value={auditFilterFromDay} 
+                            onChange={(e) => setAuditFilterFromDay(e.target.value)} 
+                            className="w-1/4 p-2 bg-white border border-slate-300 rounded-xl text-center text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          />
+                          <select 
+                            value={auditFilterFromMonth} 
+                            onChange={(e) => setAuditFilterFromMonth(e.target.value)} 
+                            className="w-1/2 p-2 bg-white border border-slate-300 rounded-xl text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          >
+                            <option value="">-- ወር ይምረጡ --</option>
+                            {ethMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <input 
+                            type="text" 
+                            placeholder="ዓ.ም" 
+                            value={auditFilterFromYear} 
+                            onChange={(e) => setAuditFilterFromYear(e.target.value)} 
+                            className="w-1/4 p-2 bg-white border border-slate-300 rounded-xl text-center text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          />
+                        </div>
+                      </div>
+
+                      {/* To Date */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">እስከ ቀን (End Date - Ethiopian):</label>
+                        <div className="flex space-x-1.5">
+                          <input 
+                            type="text" 
+                            placeholder="ቀን" 
+                            value={auditFilterToDay} 
+                            onChange={(e) => setAuditFilterToDay(e.target.value)} 
+                            className="w-1/4 p-2 bg-white border border-slate-300 rounded-xl text-center text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          />
+                          <select 
+                            value={auditFilterToMonth} 
+                            onChange={(e) => setAuditFilterToMonth(e.target.value)} 
+                            className="w-1/2 p-2 bg-white border border-slate-300 rounded-xl text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          >
+                            <option value="">-- ወር ይምረጡ --</option>
+                            {ethMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <input 
+                            type="text" 
+                            placeholder="ዓ.ም" 
+                            value={auditFilterToYear} 
+                            onChange={(e) => setAuditFilterToYear(e.target.value)} 
+                            className="w-1/4 p-2 bg-white border border-slate-300 rounded-xl text-center text-xs font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div className="flex justify-end">
-                      <button
+
+                    <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-200">
+                      <button 
                         type="button"
-                        onClick={handleResetAllData}
-                        className="bg-rose-700 hover:bg-rose-800 text-white border border-rose-640 font-extrabold py-2 px-4 rounded-xl shadow-sm transition text-[10px] uppercase tracking-wider block"
+                        onClick={() => {
+                          const todayComps = ethDateNow.split('/');
+                          if (todayComps.length === 3) {
+                            setAuditFilterFromDay(todayComps[0]);
+                            setAuditFilterFromMonth(todayComps[1]);
+                            setAuditFilterFromYear(todayComps[2]);
+                            setAuditFilterToDay(todayComps[0]);
+                            setAuditFilterToMonth(todayComps[1]);
+                            setAuditFilterToYear(todayComps[2]);
+                          } else {
+                            alert("የዛሬውን ቀን ማግኘት አልተቻለም።");
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-[10px] font-black shadow-sm cursor-pointer transition"
                       >
-                        ሁሉንም የቀድሞ መረጃዎች አጥፋ (Wipe All Records)
+                        የዛሬ ብቻ (Today Only)
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setAuditFilterFromDay('');
+                          setAuditFilterFromMonth('መስከረም');
+                          setAuditFilterFromYear('');
+                          setAuditFilterToDay('');
+                          setAuditFilterToMonth('መስከረም');
+                          setAuditFilterToYear('');
+                        }}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-100 rounded-xl text-[10px] font-black shadow-sm cursor-pointer transition"
+                      >
+                        ✕ ማጣሪያውን አጽዳ (Clear Filter)
                       </button>
                     </div>
                   </div>
 
+                  {/* 1. ID HANDOVER AUDIT */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <h4 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                        <span className="text-lg">🪪</span> ክፍል 1፡ የመታወቂያ ርክክብ ኦዲት
+                      </h4>
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
+                        auditMatch 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}>
+                        {auditMatch ? '✓ የቁጥር ኦዲት ይስማማል' : '⚠ የኦዲት ልዩነት ተገኝቷል'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Total ID backlogs */}
+                      <div className="bg-sky-50/70 p-4 rounded-xl border border-sky-100">
+                        <span className="text-[10px] text-sky-800 font-extrabold block uppercase tracking-wider">አጠቃላይ ከክፍለ ከተማ የመጡ</span>
+                        <span className="text-2xl font-black text-sky-950 mt-1 block">{totalFromSubCity}</span>
+                      </div>
+                      {/* Ready for pickup */}
+                      <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-100">
+                        <span className="text-[10px] text-amber-800 font-extrabold block uppercase tracking-wider">ምዝገባ እንዳለቀ ያልወሰዱ</span>
+                        <span className="text-2xl font-black text-amber-950 mt-1 block">{readyNotPicked}</span>
+                      </div>
+                      {/* Picked up */}
+                      <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100">
+                        <span className="text-[10px] text-emerald-800 font-extrabold block uppercase tracking-wider">የወሰዱ</span>
+                        <span className="text-2xl font-black text-emerald-950 mt-1 block">{pickedUp}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-white border border-slate-100 rounded-xl text-xs font-bold text-slate-600 flex items-center justify-between">
+                      <span>ቀመር ማረጋገጫ፡ አጠቃላይ የመጡ ({totalFromSubCity}) = ያልወሰዱ ({readyNotPicked}) + የወሰዱ ({pickedUp})</span>
+                      <span className={auditMatch ? "text-emerald-600 font-extrabold" : "text-rose-600 font-extrabold"}>
+                        {auditMatch ? "✓ እኩልነት ይገጥማል" : "⚠ እኩልነት አይገጥምም (እባክዎ መረጃዎችን ያጣሩ)"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2. FORM 010 AUDIT */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-6">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 border-b pb-2 flex items-center gap-1.5">
+                        <span className="text-lg">📦</span> ክፍል 2ሀ፡ ከክፍለ ከተማ የተረከብናቸው ቅፆች ኦዲት (ቅፅ 010 - የክፍለከተማ መረካከቢያ)
+                      </h4>
+                      <p className="text-[10px] text-gray-500 mt-1 font-bold">ይህ ክፍል በቀጥታ ከክፍለ ከተማ የተረከብናቸውን የህትመት ቅፆች አጠቃላይ መረጃ ያሳያል።</p>
+                      
+                      <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white mt-2">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-slate-700">
+                              <th className="p-3 text-[11px] font-black uppercase text-center w-12">ተ.ቁ</th>
+                              <th className="p-3 text-[11px] font-black uppercase">የኩነት አይነት (Event Type)</th>
+                              <th className="p-3 text-[11px] font-black uppercase text-center">የሰሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                              <th className="p-3 text-[11px] font-black uppercase text-center w-40">ድምር በቁጥር (Sum Qty)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 text-xs">
+                            {Object.values(form010SubCityGrouped).length > 0 ? (
+                              (Object.values(form010SubCityGrouped) as any[]).map((group: any, idx: number) => {
+                                const rangesStr = group.ranges.map((r: any) => `ከ ${r.from} እስከ ${r.to}`).join(', ');
+                                return (
+                                  <tr key={group.type} className="hover:bg-slate-50/50 transition font-sans">
+                                    <td className="p-3 text-slate-400 text-center font-mono font-bold">{idx + 1}</td>
+                                    <td className="p-3 text-slate-800 font-black">{group.type}</td>
+                                    <td className="p-3 text-slate-600 text-center font-mono font-bold">{rangesStr}</td>
+                                    <td className="p-3 text-slate-900 text-center font-mono font-black text-sm bg-slate-50/50">{group.totalQty}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="p-8 text-center text-slate-400 font-bold italic">
+                                  ምንም የተመዘገበ የክፍለከተማ መረካከቢያ መረጃ የለም።
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 border-b pb-2 flex items-center gap-1.5">
+                        <span className="text-lg">📦</span> ክፍል 2ለ፡ በወረዳ የተረከብናቸው/ያሰራጨናቸው ቅፆች ኦዲት (ቅፅ 010 - የወረዳ መረካከቢያ)
+                      </h4>
+                      <p className="text-[10px] text-gray-500 mt-1 font-bold">ይህ ክፍል በወረዳ ደረጃ ርክክብ የተደረገባቸውን እና የተከፋፈሉትን የህትመት ቅፆች አጠቃላይ መረጃ ያሳያል።</p>
+                      
+                      <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white mt-2">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-slate-700">
+                              <th className="p-3 text-[11px] font-black uppercase text-center w-12">ተ.ቁ</th>
+                              <th className="p-3 text-[11px] font-black uppercase">የኩነት አይነት (Event Type)</th>
+                              <th className="p-3 text-[11px] font-black uppercase text-center">የሰሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                              <th className="p-3 text-[11px] font-black uppercase text-center w-40">ድምር በቁጥር (Sum Qty)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 text-xs">
+                            {Object.values(form010WoredaGrouped).length > 0 ? (
+                              (Object.values(form010WoredaGrouped) as any[]).map((group: any, idx: number) => {
+                                const rangesStr = group.ranges.map((r: any) => `ከ ${r.from} እስከ ${r.to}`).join(', ');
+                                return (
+                                  <tr key={group.type} className="hover:bg-slate-50/50 transition font-sans">
+                                    <td className="p-3 text-slate-400 text-center font-mono font-bold">{idx + 1}</td>
+                                    <td className="p-3 text-slate-800 font-black">{group.type}</td>
+                                    <td className="p-3 text-slate-600 text-center font-mono font-bold">{rangesStr}</td>
+                                    <td className="p-3 text-slate-900 text-center font-mono font-black text-sm bg-slate-50/50">{group.totalQty}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="p-8 text-center text-slate-400 font-bold italic">
+                                  ምንም የተመዘገበ የወረዳ መረካከቢያ መረጃ የለም።
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. FORM 011 AUDIT */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                    <h4 className="text-sm font-black text-slate-900 border-b pb-2 flex items-center gap-1.5">
+                      <span className="text-lg">📋</span> ክፍል 3፡ በወረዳ አገልግሎት የተሰጠባቸው ቅፆች ኦዲት (ቅፅ 011)
+                    </h4>
+                    
+                    <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-700">
+                            <th className="p-3 text-[11px] font-black uppercase text-center w-12">ተ.ቁ</th>
+                            <th className="p-3 text-[11px] font-black uppercase">የኩነት አይነት (Event Type)</th>
+                            <th className="p-3 text-[11px] font-black uppercase text-center">የሴሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                            <th className="p-3 text-[11px] font-black uppercase text-center w-40">ድምር በቁጥር (Sum Qty)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-xs">
+                          {Object.values(form011Grouped).length > 0 ? (
+                            (Object.values(form011Grouped) as any[]).map((group: any, idx: number) => {
+                              const serials = group.records.map((r: any) => r.serial).filter(Boolean);
+                              const sorted = [...serials].sort((a, b) => {
+                                const numA = parseInt(a, 10);
+                                const numB = parseInt(b, 10);
+                                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                                return a.localeCompare(b);
+                              });
+                              const fromSerial = sorted[0] || '-';
+                              const toSerial = sorted[sorted.length - 1] || '-';
+                              const totalCount = group.records.length;
+
+                              return (
+                                <tr key={group.type} className="hover:bg-slate-50/50 transition font-sans">
+                                  <td className="p-3 text-slate-400 text-center font-mono font-bold">{idx + 1}</td>
+                                  <td className="p-3 text-slate-800 font-black">{group.type}</td>
+                                  <td className="p-3 text-slate-600 text-center font-mono font-bold">ከ {fromSerial} እስከ {toSerial}</td>
+                                  <td className="p-3 text-slate-900 text-center font-mono font-black text-sm bg-slate-50/50">{totalCount}</td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-8 text-center text-slate-400 font-bold italic">
+                                ምንም የተመዘገበ የቅፅ 011 መረጃ የለም።
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 4. FORM 012 AUDIT */}
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                    <h4 className="text-sm font-black text-slate-900 border-b pb-2 flex items-center gap-1.5">
+                      <span className="text-lg">🗑</span> ክፍል 4፡ የባከኑና ያልተሰጡ ቅፆች ኦዲት (ቅፅ 012)
+                    </h4>
+                    
+                    <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-700">
+                            <th className="p-3 text-[11px] font-black uppercase text-center w-12">ተ.ቁ</th>
+                            <th className="p-3 text-[11px] font-black uppercase">የኩነት አይነት (Event Type)</th>
+                            <th className="p-3 text-[11px] font-black uppercase text-center">የሰሪያል ቁጥር ክልል (Serial Range From-To)</th>
+                            <th className="p-3 text-[11px] font-black uppercase text-center w-40">ድምር በቁጥር (Sum Qty)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-xs">
+                          {Object.values(form012Grouped).length > 0 ? (
+                            (Object.values(form012Grouped) as any[]).map((group: any, idx: number) => {
+                              const serials = group.records.map((r: any) => r.serial).filter(Boolean);
+                              const sorted = [...serials].sort((a, b) => {
+                                const numA = parseInt(a, 10);
+                                const numB = parseInt(b, 10);
+                                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                                return a.localeCompare(b);
+                              });
+                              const fromSerial = sorted[0] || '-';
+                              const toSerial = sorted[sorted.length - 1] || '-';
+                              const totalCount = group.records.length;
+
+                              return (
+                                <tr key={group.type} className="hover:bg-slate-50/50 transition font-sans">
+                                  <td className="p-3 text-slate-400 text-center font-mono font-bold">{idx + 1}</td>
+                                  <td className="p-3 text-slate-800 font-black">{group.type}</td>
+                                  <td className="p-3 text-slate-600 text-center font-mono font-bold">ከ {fromSerial} እስከ {toSerial}</td>
+                                  <td className="p-3 text-slate-900 text-center font-mono font-black text-sm bg-slate-50/50">{totalCount}</td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-8 text-center text-slate-400 font-bold italic">
+                                ምንም የተመዘገበ የቅፅ 012 መረጃ የለም።
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* H. SMS GATEWAY CONFIGURATION PANEL */}
             {adminTab === 'smsGateway' && (
@@ -5739,7 +7792,6 @@ export default function App() {
           </div>
         )}
 
-      </main>
 
       {/* ============================================== */}
       {/* 4. MODALS (NO-PRINT) */}
@@ -5748,292 +7800,211 @@ export default function App() {
       {/* 4. MODALS (NO-PRINT) */}
       {/* ============================================== */}
       {/* Scanned Resident Document View Modal */}
-      {selectedViewDoc !== null && (
-        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 no-print">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full h-[88vh] overflow-hidden border border-slate-100 flex flex-col">
-            {/* Modal Header */}
-            <div className="bg-[#0f405c] text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-              <div className="flex items-center space-x-3 truncate">
-                <div className="p-2 bg-white/10 rounded-xl shrink-0">
-                  <FileText className="w-5 h-5 text-teal-300 animate-pulse" />
+      {selectedViewDoc !== null && (() => {
+        const hasScanFiles = !!(selectedViewDoc.files && selectedViewDoc.files.length > 0 && selectedViewDoc.files.some(f => f.contentUrl));
+        const pageFiles = selectedViewDoc.files || [];
+        return (
+          <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 no-print">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full h-[88vh] overflow-hidden border border-slate-100 flex flex-col">
+              {/* Modal Header */}
+              <div className="bg-[#0f405c] text-white px-5 py-3.5 flex justify-between items-center shrink-0">
+                <div className="flex items-center space-x-3 truncate">
+                  <div className="p-2 bg-white/10 rounded-xl shrink-0">
+                    <FileText className="w-5 h-5 text-teal-300 animate-pulse" />
+                  </div>
+                  <div className="truncate text-left">
+                    <h3 className="text-[10px] uppercase font-bold tracking-wider text-teal-300">የምዝገባ ማህደር መረጃዎችና አባላት (Registry Profile View)</h3>
+                    <p className="text-sm font-black text-white truncate max-w-[280px] sm:max-w-md">ባለቤት፦ {selectedViewDoc.houseOwnerName || selectedViewDoc.residentName || "ያልተሰየመ"}</p>
+                  </div>
                 </div>
-                <div className="truncate text-left">
-                  <h3 className="text-[10px] uppercase font-bold tracking-wider text-teal-300">የተቃኘ የነዋሪነት ሰነድ ምልከታና ማህደር ማስተካከያ (Visual Scan Studio)</h3>
-                  <p className="text-sm font-black text-white truncate max-w-[280px] sm:max-w-md">ባለቤት፦ {selectedViewDoc.houseOwnerName || selectedViewDoc.residentName || "ያልተሰየመ"}</p>
-                </div>
+                <button 
+                  type="button"
+                  onClick={() => setSelectedViewDoc(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition text-xs font-black shrink-0 cursor-pointer"
+                  title="ዝጋ"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button 
-                type="button"
-                onClick={() => setSelectedViewDoc(null)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition text-xs font-black shrink-0 cursor-pointer"
-                title="ዝጋ"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {/* Modal Body: Split view (Left: Rich Interactive Scan viewer, Right: Metadata & Members Registry) */}
-            <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12">
-              
-              {/* Left Pane: Interactive document container (Zoom, Rotate, Carousel) */}
-              <div className="md:col-span-7 bg-slate-100 h-full p-4 flex flex-col justify-between relative overflow-hidden min-h-[350px] md:min-h-0 border-r border-slate-200">
-                {(() => {
-                  // Resolve pages array (backwards compatible with single root files)
-                  const pageFiles: ScannedFile[] = (selectedViewDoc.files && selectedViewDoc.files.length > 0)
-                    ? selectedViewDoc.files
-                    : [{
-                        id: 'fallback_root_page',
-                        fileName: selectedViewDoc.fileName || 'ሰነድ.pdf',
-                        fileSize: selectedViewDoc.fileSize || 'W/0',
-                        contentUrl: selectedViewDoc.contentUrl || '',
-                        uploadDate: selectedViewDoc.uploadDate
-                      }];
-
-                  if (pageFiles.length === 0 || !pageFiles[0]?.contentUrl) {
-                    return (
-                      <div className="flex-1 flex flex-col justify-center items-center p-8 bg-white rounded-2xl border text-center my-auto">
-                        <AlertTriangle className="w-10 h-10 text-amber-500 mb-2 animate-bounce-short" />
-                        <h4 className="text-xs font-extrabold text-slate-800">የተጫነ ፋይል አልተገኘም!</h4>
-                        <p className="text-[10px] text-slate-450 mt-1">ይህ መዝገብ ባዶ ነው። እባክዎ ከታች ያለውን ቁልፍ ተጠቅመው የተቃኘ ገጽ ያስገቡ።</p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <>
-                      {/* Active File Navigation & Toolstrip header bar */}
-                      <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap justify-between items-center gap-2 mb-3 z-10 w-full shrink-0">
-                        {/* Page Indicators */}
-                        <div className="flex items-center space-x-1">
-                          <span className="text-[10px] font-extrabold text-teal-900 bg-teal-50 border border-teal-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-ping"></span>
-                            ጠቅላላ ገጾች፦ <strong className="text-[11px] font-sans">{pageFiles.length}</strong>
-                          </span>
-                        </div>
-
-                        {/* Interactive visibility controls (Zoom & Rotate) */}
-                        <div className="flex items-center space-x-1 text-slate-700 font-sans">
-                          <span className="text-[9px] font-bold text-slate-400 mr-1">ሁሉንም አጉላ፦</span>
-                          <button
-                            type="button"
-                            onClick={() => setResDocZoom(prev => Math.max(0.4, prev - 0.2))}
-                            className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs font-bold transition flex items-center justify-center shrink-0"
-                            title="Zoom Out (ትንሽ አድርግ)"
-                          >
-                            ➖
-                          </button>
-                          <span className="text-[9.5px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 tracking-tighter shrink-0">
-                            {Math.round(resDocZoom * 100)}%
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setResDocZoom(prev => Math.min(3.0, prev + 0.2))}
-                            className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs font-bold transition flex items-center justify-center shrink-0"
-                            title="Zoom In (ከትልቅ አድርግ)"
-                          >
-                            ➕
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setResDocRotate(prev => (prev + 90) % 360)}
-                            className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs transition flex items-center justify-center shrink-0"
-                            title="Rotate Right (በ90 ዲግሪ አሽከርክር)"
-                          >
-                            🔄
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setResDocZoom(1);
-                              setResDocRotate(0);
-                            }}
-                            className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-[9px] font-bold transition shrink-0"
-                            title="Reset Layout Settings"
-                          >
-                            ↩ Reset
-                          </button>
-                        </div>
+              {/* Modal Body: Custom conditional layout depending on file scan status */}
+              <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12">
+                
+                {/* Left Pane: Interactive document container (Zoom, Rotate, Carousel) */}
+                {hasScanFiles && (
+                  <div className="md:col-span-7 bg-slate-100 h-full p-4 flex flex-col justify-between relative overflow-hidden min-h-[350px] md:min-h-0 border-r border-slate-200">
+                    {/* Active File Navigation & Toolstrip header bar */}
+                    <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap justify-between items-center gap-2 mb-3 z-10 w-full shrink-0">
+                      {/* Page Indicators */}
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[10px] font-extrabold text-teal-900 bg-teal-50 border border-teal-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-ping"></span>
+                          ጠቅላላ ገጾች፦ <strong className="text-[11px] font-sans">{pageFiles.length}</strong>
+                        </span>
                       </div>
 
-                      {/* Display Viewport: Unified Scroll Viewport of All Pages */}
-                      <div className="flex-1 w-full overflow-y-auto space-y-4 p-3 bg-slate-250/30 rounded-2xl border border-slate-300/40 custom-scrollbar relative min-h-[300px] max-h-[58vh]">
-                        {pageFiles.map((fileObj, idx) => {
-                          const fileUrl = fileObj.contentUrl;
-                          const isPdf = fileUrl?.startsWith('data:application/pdf') || fileObj.fileName?.toLowerCase().endsWith('.pdf');
-                          const isImage = fileUrl?.startsWith('data:image/');
+                      {/* Interactive visibility controls (Zoom & Rotate) */}
+                      <div className="flex items-center space-x-1 text-slate-700 font-sans">
+                        <span className="text-[9px] font-bold text-slate-400 mr-1">ሁሉንም አጉላ፦</span>
+                        <button
+                          type="button"
+                          onClick={() => setResDocZoom(prev => Math.max(0.4, prev - 0.2))}
+                          className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs font-bold transition flex items-center justify-center shrink-0"
+                          title="Zoom Out (ትንሽ አድርግ)"
+                        >
+                          ➖
+                        </button>
+                        <span className="text-[9.5px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 tracking-tighter shrink-0">
+                          {Math.round(resDocZoom * 100)}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setResDocZoom(prev => Math.min(3.0, prev + 0.2))}
+                          className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs font-bold transition flex items-center justify-center shrink-0"
+                          title="Zoom In (ከትልቅ አድርግ)"
+                        >
+                          ➕
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResDocRotate(prev => (prev + 90) % 360)}
+                          className="p-1 w-7 h-7 bg-slate-50 hover:bg-slate-150 rounded-lg text-xs transition flex items-center justify-center shrink-0"
+                          title="Rotate Right (በ90 ዲግሪ አሽከርክር)"
+                        >
+                          🔄
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResDocZoom(1);
+                            setResDocRotate(0);
+                          }}
+                          className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-[9px] font-bold transition shrink-0"
+                          title="Reset Layout Settings"
+                        >
+                          ↩ Reset
+                        </button>
+                      </div>
+                    </div>
 
-                          return (
-                            <div 
-                              key={fileObj.id || idx} 
-                              id={`doc-page-view-${idx}`}
-                              className="bg-white p-3 rounded-2xl border border-slate-150 shadow-xs space-y-2 text-left"
-                            >
-                              {/* individual Page Header */}
-                              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                <div className="text-left font-sans flex items-center truncate max-w-[70%]">
-                                  <span className="inline-flex items-center justify-center bg-[#0f405c] text-white text-[9px] font-black w-4.5 h-4.5 rounded-full mr-2 shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  <span className="text-[10px] font-extrabold text-[#0f384c] truncate" title={fileObj.fileName}>
-                                    {fileObj.fileName}
-                                  </span>
-                                  <span className="text-[8px] font-bold text-slate-400 ml-2 bg-slate-100 px-1.5 py-0.5 rounded-md font-mono shrink-0">
-                                    {fileObj.fileSize}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (confirm(`እርግጠኛ ነዎት ገጽ ${idx + 1} ("${fileObj.fileName}") ከማህደሩ ውስጥ ማጥፋት ይፈልጋሉ?`)) {
-                                      handleDeleteFileFromDoc(selectedViewDoc.id, fileObj.id);
-                                    }
-                                  }}
-                                  className="text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-100 hover:border-rose-600 text-[9px] font-black px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                  <span>ሰርዝ</span>
-                                </button>
+                    {/* Display Viewport: Unified Scroll Viewport of All Pages */}
+                    <div className="flex-1 w-full overflow-y-auto space-y-4 p-3 bg-slate-250/30 rounded-2xl border border-slate-300/40 custom-scrollbar relative min-h-[300px] max-h-[58vh]">
+                      {pageFiles.map((fileObj, idx) => {
+                        const fileUrl = fileObj.contentUrl;
+                        const isPdf = fileUrl?.startsWith('data:application/pdf') || fileObj.fileName?.toLowerCase().endsWith('.pdf');
+                        const isImage = fileUrl?.startsWith('data:image/');
+
+                        return (
+                          <div 
+                            key={fileObj.id || idx} 
+                            id={`doc-page-view-${idx}`}
+                            className="bg-white p-3 rounded-2xl border border-slate-150 shadow-xs space-y-2 text-left"
+                          >
+                            {/* individual Page Header */}
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                              <div className="text-left font-sans flex items-center truncate max-w-[70%]">
+                                <span className="inline-flex items-center justify-center bg-[#0f405c] text-white text-[9px] font-black w-4.5 h-4.5 rounded-full mr-2 shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <span className="text-[10px] font-extrabold text-[#0f384c] truncate" title={fileObj.fileName}>
+                                  {fileObj.fileName}
+                                </span>
+                                <span className="text-[8px] font-bold text-slate-400 ml-2 bg-slate-100 px-1.5 py-0.5 rounded-md font-mono shrink-0">
+                                  {fileObj.fileSize}
+                                </span>
                               </div>
-
-                              {/* Media Render */}
-                              <div className="w-full bg-slate-50/50 rounded-xl overflow-hidden flex items-center justify-center relative p-1 border border-slate-200/60 min-h-[160px]">
-                                {isPdf ? (
-                                  <div className="w-full h-[520px] relative overflow-hidden" style={{ transform: `scale(${resDocZoom}) rotate(${resDocRotate}deg)`, transition: 'transform 0.15s ease-out' }}>
-                                    <iframe 
-                                      src={fileUrl} 
-                                      className="w-full h-full rounded-lg border border-slate-200 bg-white" 
-                                      title={fileObj.fileName}
-                                    ></iframe>
-                                    {resDocZoom !== 1 && (
-                                      <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[8px] font-bold px-2 py-0.5 rounded font-sans">
-                                        Zoom is managed inside browser toolbar.
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : isImage ? (
-                                  <div className="w-full overflow-auto flex items-center justify-center p-2 custom-scrollbar">
-                                    <img 
-                                      src={fileUrl} 
-                                      style={{ transform: `scale(${resDocZoom}) rotate(${resDocRotate}deg)`, transition: 'transform 0.15s ease-out' }}
-                                      className="max-w-full max-h-[750px] object-contain rounded-lg shadow-sm border border-slate-200" 
-                                      referrerPolicy="no-referrer" 
-                                      alt={fileObj.fileName} 
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="p-6 bg-white rounded-2xl border shadow-xs max-w-sm text-center">
-                                    <FileSpreadsheet className="w-8 h-8 text-teal-850 mx-auto mb-2" />
-                                    <p className="text-[10px] font-black text-slate-800">ቅድመ-ዕይታ መክፈት አልተቻለም (Unsupported format)</p>
-                                    <p className="text-[9px] text-slate-500 font-bold mt-1">ፋይል፡ {fileObj.fileName}</p>
-                                    <a 
-                                      href={fileUrl} 
-                                      download={fileObj.fileName} 
-                                      className="inline-flex mt-2 bg-[#0f405c] hover:bg-[#072436] text-white px-3 py-1.5 rounded-lg text-[9px] font-black shadow-xs transition items-center space-x-1"
-                                    >
-                                      <Download className="w-3 h-3" />
-                                      <span>ሰነዱን ያውርዱ (Download)</span>
-                                    </a>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Thumbnail Strip Gallery & Actions to Append Files */}
-                      <div className="mt-2.5 space-y-2 shrink-0 w-full">
-                        {/* Interactive Page list thumbnails strip if multiple pages are present */}
-                        {pageFiles.length > 1 && (
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 leading-none">
-                            <span className="text-[8px] font-black text-slate-400 block uppercase mb-1 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              <span>ፈጣን ዝላይ (ለመዝለል ጠቅ ያድርጉ)፦</span>
-                            </span>
-                            <div className="flex space-x-1.5 overflow-x-auto py-1 scrollbar-thin">
-                              {pageFiles.map((file, idx) => (
-                                <button
-                                  key={file.id || idx}
-                                  type="button"
-                                  onClick={() => {
-                                    document.getElementById(`doc-page-view-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }}
-                                  className="px-2.5 py-1.5 bg-white hover:bg-amber-50 border border-slate-200/80 hover:border-amber-300 rounded-lg text-[9.5px] font-bold text-slate-700 hover:text-amber-950 font-sans flex items-center gap-1 transition shrink-0 cursor-pointer"
-                                  title={`ወደ ገጽ ${idx + 1} ዝለል`}
-                                >
-                                  📄 ገጽ {idx + 1}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Direct Drag & Select zone inside the Modal to append more disjointed pages */}
-                        <div className="bg-teal-50/40 p-2.5 rounded-2xl border border-dashed border-teal-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
-                          <div className="flex items-center space-x-2">
-                            <span className="p-1.5 bg-teal-100 border border-teal-200 rounded-lg text-teal-800">
-                              <Plus className="w-3.5 h-3.5 animate-pulse" />
-                            </span>
-                            <div>
-                              <h5 className="text-[9.5px] text-teal-950 font-extrabold leading-normal">የተበታተኑ ገጾችን እዚህ አያይዝ (Append Scan Page)</h5>
-                              <p className="text-[8px] text-slate-450 font-bold font-sans">ይህንን ቤት የሚመለከቱ አዳዲስ የተቃኙ ወረቀቶች/ካርታዎችን በማጣመር አንድ ላይ ያስቀምጡ።</p>
-                            </div>
-                          </div>
-                          
-                          <input 
-                            type="file" 
-                            id="appendModalPageInput" 
-                            multiple
-                            accept="application/pdf,image/*"
-                            className="hidden" 
-                            onChange={(e) => {
-                              const files = e.target.files;
-                              if (files && files.length > 0) {
-                                const tempScans: ScannedFile[] = [];
-                                Array.from(files).forEach((file: any) => {
-                                  if (file.size > 20 * 1024 * 1024) {
-                                    alert(`ፋይል "${file.name}" መጠን ከ20MB ይበልጣል።`);
-                                    return;
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`እርግጠኛ ነዎት ገጽ ${idx + 1} ("${fileObj.fileName}") ከማህደሩ ውስጥ ማጥፋት ይፈልጋሉ?`)) {
+                                    handleDeleteFileFromDoc(selectedViewDoc.id, fileObj.id);
                                   }
-                                  const kb = file.size / 1024;
-                                  const sizeStr = kb > 1024 ? (kb / 1024).toFixed(2) + " MB" : kb.toFixed(1) + " KB";
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    if (ev.target?.result) {
-                                      const newScanned: ScannedFile = {
-                                        id: 'scan_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                                        fileName: file.name,
-                                        fileSize: sizeStr,
-                                        contentUrl: ev.target.result as string,
-                                        uploadDate: `${getEthiopianDate()} ${getEthiopianTime()}`
-                                      };
-                                      tempScans.push(newScanned);
-                                      if (tempScans.length === files.length) {
-                                        handleAddNewFilesToDoc(selectedViewDoc.id, tempScans);
-                                      }
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
-                                });
-                              }
-                            }}
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => document.getElementById('appendModalPageInput')?.click()}
-                            className="bg-teal-700 hover:bg-[#0f405c] text-white font-extrabold text-[9px] px-3.5 py-2 rounded-xl cursor-pointer shadow-sm active:scale-95 transition whitespace-nowrap"
-                          >
-                            + የተበታተነ ፋይል አያይዝ
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
+                                }}
+                                className="text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-100 hover:border-rose-600 text-[9px] font-black px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>ሰርዝ</span>
+                              </button>
+                            </div>
 
-              {/* Right Pane: Document details, Notes, and Detailed Household Members Registry */}
-              <div className="md:col-span-5 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100 h-full overflow-y-auto bg-slate-50/50">
+                            {/* Media Render */}
+                            <div className="w-full bg-slate-50/50 rounded-xl overflow-hidden flex items-center justify-center relative p-1 border border-slate-200/60 min-h-[160px]">
+                              {isPdf ? (
+                                <div className="w-full h-[520px] relative overflow-hidden" style={{ transform: `scale(${resDocZoom}) rotate(${resDocRotate}deg)`, transition: 'transform 0.15s ease-out' }}>
+                                  <iframe 
+                                    src={fileUrl} 
+                                    className="w-full h-full rounded-lg border border-slate-200 bg-white" 
+                                    title={fileObj.fileName}
+                                  ></iframe>
+                                  {resDocZoom !== 1 && (
+                                    <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[8px] font-bold px-2 py-0.5 rounded font-sans">
+                                      Zoom is managed inside browser toolbar.
+                                    </span>
+                                  )}
+                                </div>
+                              ) : isImage ? (
+                                <div className="w-full overflow-auto flex items-center justify-center p-2 custom-scrollbar">
+                                  <img 
+                                    src={fileUrl} 
+                                    style={{ transform: `scale(${resDocZoom}) rotate(${resDocRotate}deg)`, transition: 'transform 0.15s ease-out' }}
+                                    className="max-w-full max-h-[750px] object-contain rounded-lg shadow-sm border border-slate-200" 
+                                    referrerPolicy="no-referrer" 
+                                    alt={fileObj.fileName} 
+                                  />
+                                </div>
+                              ) : (
+                                <div className="p-6 bg-white rounded-2xl border shadow-xs max-w-sm text-center">
+                                  <FileSpreadsheet className="w-8 h-8 text-teal-850 mx-auto mb-2" />
+                                  <p className="text-[10px] font-black text-slate-800">ቅድመ-ዕይታ መክፈት አልተቻለም (Unsupported format)</p>
+                                  <p className="text-[9px] text-slate-500 font-bold mt-1">ፋይል፡ {fileObj.fileName}</p>
+                                  <a 
+                                    href={fileUrl} 
+                                    download={fileObj.fileName} 
+                                    className="inline-flex mt-2 bg-[#0f405c] hover:bg-[#072436] text-white px-3 py-1.5 rounded-lg text-[9px] font-black shadow-xs transition items-center space-x-1"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    <span>ሰነዱን ያውርዱ (Download)</span>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Thumbnail Strip Gallery & Actions */}
+                    <div className="mt-2.5 space-y-2 shrink-0 w-full">
+                      {/* Interactive Page list thumbnails strip if multiple pages are present */}
+                      {pageFiles.length > 1 && (
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/60 leading-none">
+                          <span className="text-[8px] font-black text-slate-400 block uppercase mb-1 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <span>ፈጣን ዝላይ (ለመዝለል ጠቅ ያድርጉ)፦</span>
+                          </span>
+                          <div className="flex space-x-1.5 overflow-x-auto py-1 scrollbar-thin">
+                            {pageFiles.map((file, idx) => (
+                              <button
+                                key={file.id || idx}
+                                type="button"
+                                onClick={() => {
+                                  document.getElementById(`doc-page-view-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }}
+                                className="px-2.5 py-1.5 bg-white hover:bg-amber-50 border border-slate-200/80 hover:border-amber-300 rounded-lg text-[9.5px] font-bold text-slate-700 hover:text-amber-950 font-sans flex items-center gap-1 transition shrink-0 cursor-pointer"
+                                title={`ወደ ገጽ ${idx + 1} ዝለል`}
+                              >
+                                📄 ገጽ {idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Pane: Document details, Notes, and Detailed Household Members Registry */}
+                <div className={`${hasScanFiles ? 'md:col-span-5 border-l border-slate-100' : 'md:col-span-12 max-w-4xl mx-auto w-full'} p-5 flex flex-col justify-between border-t md:border-t-0 h-full overflow-y-auto bg-slate-50/50`}>
                 <div className="space-y-4">
                   {/* Badge & Print Action */}
                   <div className="flex justify-between items-center pb-2 border-b">
@@ -6077,7 +8048,7 @@ export default function App() {
                   <div className="space-y-2 border-b bg-[#0f405c]/5 p-3 rounded-2xl border border-[#0f405c]/10 pb-3">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] uppercase font-black text-[#0f405c] flex items-center gap-1">
-                        <Fingerprint className="w-4 h-4 text-teal-600 animate-pulse" />
+                        <Layers className="w-4 h-4 text-teal-600" />
                         <span>የቤት ውስጥ ነዋሪዎች ሰንጠረዥ ({selectedViewDoc.members?.length || 0} አባላት)</span>
                       </span>
                     </div>
@@ -6219,7 +8190,7 @@ export default function App() {
                       return (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 space-y-1 text-left">
                           <span className="text-[8.5px] font-black text-amber-900 block uppercase flex items-center gap-1">
-                            <Fingerprint className="w-3.5 h-3.5 text-amber-700 animate-pulse shrink-0" />
+                            <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                             <span>በቀኑ ርክክብ መዝገብ የተገኙ ተጨማሪ የቤት አባላት ({unaddedMatching.length})፦</span>
                           </span>
                           <div className="flex flex-wrap gap-1 leading-none py-1">
@@ -6329,7 +8300,8 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Electronic ID Pickup Confirmation Drawer Signature Pad modal */}
       {selectedHandoverIndex !== null && (
@@ -6438,7 +8410,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const template = `ጤና ይስጥልኝ ${smsRecord.name}፣ የቦሌ ወረዳ 05 የነዋሪ መታወቂያዎ (ቁጥር ${smsRecord.idNumber}) ታትሞ ተዘጋጅቷል። እባክዎ ቀዳሚ መታወቂያዎን ወይም የልደት ካርድዎን በመያዝ በስራ ሰዓት በአካል መጥተው ከምድብ መስኮት 3 (Window 3) ላይ ይረከቡ። አመሰግናለን!`;
+                      const template = `ጤና ይስጥልኝ ${smsRecord.name}፣ የቦሌ ወረዳ 05 የነዋሪ መታወቂያዎ (ቁጥር ${smsRecord.idNumber}) ታትሞ ተዘጋጅቷል። እባክዎ ቀዳሚ መታወቂያዎን ወይም የልደት ካርድዎን በመያዝ በስራ ሰዓት በአካል መጥተው ከምድብ መስኮት 3 (Window 3) ላይ ይረከቡ። እናመሰግናለን!`;
                       setSmsText(template);
                     }}
                     className="py-2 px-3 bg-slate-55 hover:bg-slate-100 text-slate-800 text-[10px] font-black rounded-xl border border-slate-200 transition"
@@ -6621,6 +8593,243 @@ export default function App() {
         </div>
       )}
 
+      {/* Full Digital Transition & Proposal Modal */}
+      <ProposalModal isOpen={showProposalModal} onClose={() => setShowProposalModal(false)} />
+
+      {/* ፊርማ አስቀምጥ/ቀይር Modal */}
+      {activeSignatureRecord && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-150 flex flex-col animate-scale-up">
+            {/* Modal Header */}
+            <div className="bg-teal-900 text-white p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-white/10 rounded-xl">
+                  <ShieldCheck className="w-5 h-5 text-teal-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wide">ዲጂታል ፊርማ አስቀምጥ / ማረጋገጫ</h3>
+                  <p className="text-[10px] text-slate-300 font-bold mt-0.5">ለቅፅ {activeSignatureRecord.type === 'f10' ? '010' : activeSignatureRecord.type === 'f11' ? '011' : '012'} መዝገብ (የመታወቂያ/የሰነድ ማረጋገጫ ፊርማ)</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setActiveSignatureRecord(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition text-xs font-black"
+                title="ዝጋ"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4 overflow-y-auto font-sans text-left">
+              {/* Option Switcher State */}
+              {(() => {
+                const [sigTab, setSigTab] = useState<'draw' | 'generate' | 'upload'>('draw');
+                const [genName, setGenName] = useState(activeSignatureRecord.name || '');
+                const [genFont, setGenFont] = useState('Great Vibes');
+                const [uploadSrc, setUploadSrc] = useState('');
+
+                const handleDrawSave = (dataUrl: string) => {
+                  handleUpdateRecordSignature(activeSignatureRecord.type, activeSignatureRecord.id, dataUrl);
+                };
+
+                const handleGenerateSave = () => {
+                  if (!genName.trim()) {
+                    alert("እባክዎ መጀመሪያ ስም ያስገቡ!");
+                    return;
+                  }
+                  const dataUrl = generateCursiveSignature(genName.trim(), genFont);
+                  handleUpdateRecordSignature(activeSignatureRecord.type, activeSignatureRecord.id, dataUrl);
+                };
+
+                const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      if (event.target?.result) {
+                        setUploadSrc(event.target.result as string);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                };
+
+                const handleUploadSave = () => {
+                  if (!uploadSrc) {
+                    alert("እባክዎ መጀመሪያ የምስል ፋይል ይምረጡ!");
+                    return;
+                  }
+                  handleUpdateRecordSignature(activeSignatureRecord.type, activeSignatureRecord.id, uploadSrc);
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {/* Tab Selection */}
+                    <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl text-[10px] sm:text-[11px] font-extrabold text-slate-600">
+                      <button
+                        type="button"
+                        onClick={() => setSigTab('draw')}
+                        className={`py-2 px-1 rounded-lg text-center transition ${sigTab === 'draw' ? 'bg-white text-teal-900 shadow-sm font-black' : 'hover:bg-slate-50'}`}
+                      >
+                        ✍️ በእጅ ይፈረሙ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSigTab('generate')}
+                        className={`py-2 px-1 rounded-lg text-center transition ${sigTab === 'generate' ? 'bg-white text-teal-900 shadow-sm font-black' : 'hover:bg-slate-50'}`}
+                      >
+                        ⚙️ በስም ማመንጫ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSigTab('upload')}
+                        className={`py-2 px-1 rounded-lg text-center transition ${sigTab === 'upload' ? 'bg-white text-teal-900 shadow-sm font-black' : 'hover:bg-slate-50'}`}
+                      >
+                        📁 ምስል ይጫኑ
+                      </button>
+                    </div>
+
+                    {/* Tab contents */}
+                    {sigTab === 'draw' && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
+                          ከታች ባለው የማስፈረሚያ ሰሌዳ ላይ ጣትዎን ወይም ማውዝዎን በመጠቀም ትክክለኛውን ፊርማ መፈረም ይችላሉ።
+                        </p>
+                        <div className="border border-slate-200 rounded-2xl p-2 bg-slate-50">
+                          <SignaturePad 
+                            onSave={handleDrawSave}
+                            placeholderText="እባክዎን ፊርማዎን እዚህ ሰሌዳ ውስጥ ይሳሉ ከዚያም 'ፊርማ አስቀምጥ' የሚለውን ይጫኑ..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {sigTab === 'generate' && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
+                          መፈረም የከበደዎት ከሆነ ስሙን በማስገባት ዲጂታል የሚፈስ (Cursive) ፊርማ በራስ-ሰር ማመንጨት ይችላሉ።
+                        </p>
+                        
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">ፊርማ የሚደረግበት ስም (Signee Name)</label>
+                            <input
+                              type="text"
+                              value={genName}
+                              onChange={(e) => setGenName(e.target.value)}
+                              placeholder="የፈራሚውን ስም ያስገቡ..."
+                              className="w-full p-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-700 focus:outline-none font-bold text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">የፊርማው ቅርጸት ስታይል (Font Style)</label>
+                            <select
+                              value={genFont}
+                              onChange={(e) => setGenFont(e.target.value)}
+                              className="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-xs bg-white focus:outline-none"
+                            >
+                              <option value="Great Vibes">ስታይል 1 (Great Vibes)</option>
+                              <option value="Caveat">ስታይል 2 (Caveat)</option>
+                              <option value="Sacramento">ስታይል 3 (Sacramento)</option>
+                              <option value="cursive">ስታይል 4 (Cursive Font)</option>
+                            </select>
+                          </div>
+
+                          {/* Previews the generated canvas signature */}
+                          <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 flex items-center justify-center min-h-[110px]">
+                            {genName.trim() ? (
+                              <div className="text-center">
+                                <span className="block text-[8px] text-slate-400 font-bold mb-1">የማሳያ ቅድመ እይታ (Live Preview)</span>
+                                <img 
+                                  src={generateCursiveSignature(genName, genFont)} 
+                                  className="mx-auto bg-white border border-dashed border-teal-300 rounded-xl p-2 shadow-sm h-14" 
+                                  alt="Generated Signature" 
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[10px]">ስም ሲያስገቡ የፊርማው ቅድመ እይታ እዚህ ይታያል</span>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end pt-2">
+                            <button
+                              type="button"
+                              onClick={handleGenerateSave}
+                              className="bg-teal-800 hover:bg-teal-950 text-white font-extrabold py-2.5 px-5 rounded-xl text-xs shadow-md transition active:scale-95 cursor-pointer"
+                            >
+                              ✓ የተፈጠረውን ፊርማ አስቀምጥ
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {sigTab === 'upload' && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
+                          ከዚህ ቀደም በወረቀት ላይ የተፈረመ ወይም የተቃኘ የፊርማ ምስል ፋይል በቀጥታ ከኮምፒውተርዎ ላይ መጫን ይችላሉ።
+                        </p>
+
+                        <div className="space-y-3">
+                          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-5 text-center bg-slate-50 hover:bg-slate-100/50 transition relative">
+                            <input 
+                              type="file" 
+                              accept="image/*"
+                              onChange={handleFileUpload}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="space-y-1">
+                              <span className="text-lg">📁</span>
+                              <p className="text-xs font-bold text-slate-700">የፊርማ ምስል እዚህ ይጫኑ</p>
+                              <p className="text-[9px] text-slate-400">PNG, JPG ወይም JPEG (ፋይሉ ከ 1MB በታች መሆን አለበት)</p>
+                            </div>
+                          </div>
+
+                          {uploadSrc && (
+                            <div className="border border-slate-200 rounded-2xl p-4 bg-white flex flex-col items-center">
+                              <span className="text-[8px] text-slate-400 font-bold mb-2">የተጫነው ፊርማ ቅድመ እይታ</span>
+                              <img src={uploadSrc} className="max-h-16 bg-white border rounded p-1" alt="Uploaded sig preview" />
+                            </div>
+                          )}
+
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={handleUploadSave}
+                              className="bg-teal-800 hover:bg-teal-950 text-white font-extrabold py-2.5 px-5 rounded-xl text-xs shadow-md transition active:scale-95 cursor-pointer"
+                              disabled={!uploadSrc}
+                            >
+                              ✓ የተጫነውን ፊርማ አስቀምጥ
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-100 p-4 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActiveSignatureRecord(null)}
+                className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-extrabold py-2 px-5 rounded-xl text-xs transition active:scale-95"
+              >
+                ዝጋ (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      </main>
+
 
       {/* 5. FOOTER SECTION - no print */}
       <footer className="bg-gradient-to-r from-teal-950 to-teal-900 text-slate-300 py-6 mt-12 text-xs no-print border-t border-teal-700">
@@ -6639,7 +8848,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-
     </div>
   );
 }

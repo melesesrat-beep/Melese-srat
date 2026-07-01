@@ -128,6 +128,20 @@
         "uploadedBy": { "type": "string" }
       },
       "required": ["id", "residentName", "docType", "fileName", "uploadDate"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Represents an action audit log for district and system operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "woreda": { "type": "string" },
+        "action": { "type": "string" },
+        "operator": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "woreda", "action", "operator"]
     }
   },
   "firestore": {
@@ -162,6 +176,10 @@
     "residentDocuments": {
       "schema": "ResidentDocument",
       "description": "Central digital document archive of scanned resident files (PDFs) with full online indexing and search"
+    },
+    "auditLogs": {
+      "schema": "AuditLog",
+      "description": "Operational audit trails logged by staff actions for data compliance and separation verification"
     }
   }
 }

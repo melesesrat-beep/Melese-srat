@@ -15,6 +15,8 @@ export interface IDRecord {
   pickupSignature?: string;
   smsSent?: boolean;
   smsSentDate?: string;
+  registrationDate?: string;
+  woreda?: string;
 }
 
 export interface GeneratedDocument {
@@ -25,6 +27,7 @@ export interface GeneratedDocument {
   house: string;
   date: string;
   payload: Record<string, string>;
+  woreda?: string;
 }
 
 export interface Form010Record {
@@ -36,6 +39,9 @@ export interface Form010Record {
   to: string;
   date: string;
   remark: string;
+  woreda?: string;
+  handoverType?: 'የክፍለከተማ መረካከቢያ' | 'የወረዳ መረካከቢያ';
+  signature?: string;
 }
 
 export interface Form011Record {
@@ -49,6 +55,7 @@ export interface Form011Record {
   time: string;
   phone: string;
   signature?: string;
+  woreda?: string;
 }
 
 export interface Form012Record {
@@ -59,6 +66,8 @@ export interface Form012Record {
   serial: string;
   date: string;
   reason: string;
+  woreda?: string;
+  signature?: string;
 }
 
 export interface OnlinePortalTicket {
@@ -72,6 +81,7 @@ export interface OnlinePortalTicket {
   notes?: string;
   smsSent?: boolean;
   smsSentDate?: string;
+  woreda?: string;
 }
 
 export interface ScannedFile {
@@ -99,6 +109,7 @@ export interface ResidentDocument {
   uploadedBy?: string;
   files: ScannedFile[];
   members: HouseholdMember[];
+  woreda?: string;
 
   // For compatibility with single-page legacy records or other access patterns
   residentName?: string;
@@ -107,4 +118,14 @@ export interface ResidentDocument {
   fileSize?: string;
   contentUrl?: string;
 }
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  woreda: string;
+  action: string;
+  operator: string;
+  details: string;
+}
+
 
